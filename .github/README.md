@@ -30,6 +30,7 @@ To enable auto-deployment, configure these secrets in your GitHub repository:
 | `VPS_HOST` | VPS IP address or domain | `51.222.106.47` |
 | `VPS_USERNAME` | SSH username | `ubuntu` |
 | `VPS_SSH_KEY` | Private SSH key for authentication | Contents of `~/.ssh/id_ed25519` |
+| `VPS_SSH_PASSPHRASE` | SSH key passphrase (if key is password-protected) | Your key passphrase |
 | `VPS_PORT` | SSH port (optional, defaults to 22) | `22` |
 
 ### How to Add SSH Key Secret
