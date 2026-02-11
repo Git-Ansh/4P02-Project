@@ -82,8 +82,10 @@ export function TronGridBackground() {
   }, [])
 
   // Get new direction for chaser (blue)
+  // FORBIDS BACKWARD MOTION - entities can only go forward, left, or right
   const getChaseDirection = (current: Direction, myX: number, myY: number, targetX: number, targetY: number): Direction => {
     const opps: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' }
+    // Filter out backward direction (opposite of current) - can only go forward, left, or right
     const available = ['up', 'down', 'left', 'right'].filter(d => d !== opps[current]) as Direction[]
     
     const scores = available.map(dir => {
@@ -102,8 +104,10 @@ export function TronGridBackground() {
   }
 
   // Get new direction for fleeing (orange)
+  // FORBIDS BACKWARD MOTION - entities can only go forward, left, or right
   const getFleeDirection = (current: Direction, myX: number, myY: number, threatX: number, threatY: number): Direction => {
     const opps: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' }
+    // Filter out backward direction (opposite of current) - can only go forward, left, or right
     const available = ['up', 'down', 'left', 'right'].filter(d => d !== opps[current]) as Direction[]
     
     const scores = available.map(dir => {
@@ -122,26 +126,28 @@ export function TronGridBackground() {
   }
 
   // Helper to get a valid direction that doesn't go off-screen
-  const getValidDirection = (preferred: Direction, x: number, y: number, maxX: number, maxY: number): Direction => {
+  // FORBIDS BACKWARD MOTION - entities can only go forward, left, or right
+  const getValidDirection = (current: Direction, preferred: Direction, x: number, y: number, maxX: number, maxY: number): Direction => {
     const opps: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' }
     const allDirs: Direction[] = ['up', 'down', 'left', 'right']
     
-    // Check if preferred direction is valid
+    // Check if preferred direction is valid (not off-screen and not backward)
     let isValid = true
     if (preferred === 'right' && x >= maxX) isValid = false
     if (preferred === 'left' && x <= 0) isValid = false
     if (preferred === 'down' && y >= maxY) isValid = false
     if (preferred === 'up' && y <= 0) isValid = false
+    if (preferred === opps[current]) isValid = false // NEVER go backward
     
     if (isValid) return preferred
     
-    // Find valid alternatives
+    // Find valid alternatives (excluding backward direction)
     const validDirs = allDirs.filter(dir => {
       if (dir === 'right' && x >= maxX) return false
       if (dir === 'left' && x <= 0) return false
       if (dir === 'down' && y >= maxY) return false
       if (dir === 'up' && y <= 0) return false
-      return dir !== opps[preferred] // Don't go backwards
+      return dir !== opps[current] // NEVER go backward from current direction
     })
     
     return validDirs.length > 0 ? validDirs[Math.floor(Math.random() * validDirs.length)] : preferred
@@ -267,8 +273,8 @@ export function TronGridBackground() {
               // At edge but not corner - 70% chance to flee, 30% chance to continue along edge
               if (Math.random() < 0.7) {
                 const newDir = getFleeDirection(direction, x, y, blueRef.current.head.x, blueRef.current.head.y)
-                // But don't choose a direction that goes off-screen
-                const validDir = getValidDirection(newDir, x, y, maxX, maxY)
+                // But don't choose a direction that goes off-screen or backward
+                const validDir = getValidDirection(direction, newDir, x, y, maxX, maxY)
                 direction = validDir
               }
               // 30% chance: keep going along the edge
