@@ -7,7 +7,15 @@ import { Footer } from "@/components/footer"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { GraduationCap, User, Users, CalendarDays, ArrowRight } from "lucide-react"
 
 
@@ -36,7 +44,7 @@ export default function AdminSidebar() {
           variant="ghost"
           className="w-full justify-start gap-4 text-muted-foreground hover:text-foreground hover:bg-accent/80"
         >
-          <Link href="">
+          <Link href="/admin/Employee">
             <Users className="h-6 w-6 text-primary" />
             Instructors
           </Link>
