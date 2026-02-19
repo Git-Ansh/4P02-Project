@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="strokeTL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.18" />
+      <stop offset="60%" stop-color="#6366F1" stop-opacity="0.07" />
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0" />
+    </linearGradient>
+
+    <linearGradient id="strokeBR" x1="1" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.18" />
+      <stop offset="60%" stop-color="#6366F1" stop-opacity="0.07" />
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0" />
+    </linearGradient>
+
+    <filter id="softBlur">
+      <feGaussianBlur stdDeviation="2.2" />
+    </filter>
+  </defs>
+
+  <!-- TOP-LEFT big sweep -->
+  <path
+    d="
+      M -260 180
+      C 120 10, 520 -10, 820 80
+      S 1320 290, 1760 170
+    "
+    fill="none"
+    stroke="url(#strokeTL)"
+    stroke-width="72"
+    stroke-linecap="round"
+    filter="url(#softBlur)"
+  />
+
+  <!-- TOP-LEFT thin -->
+  <path
+    d="
+      M -260 240
+      C 160 60, 560 20, 880 120
+      S 1380 330, 1760 210
+    "
+    fill="none"
+    stroke="url(#strokeTL)"
+    stroke-width="18"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+
+  <!-- TOP-LEFT mid -->
+  <path
+    d="
+      M -260 290
+      C 200 120, 640 80, 960 180
+      S 1440 400, 1760 270
+    "
+    fill="none"
+    stroke="url(#strokeTL)"
+    stroke-width="44"
+    stroke-linecap="round"
+    opacity="0.55"
+    filter="url(#softBlur)"
+  />
+
+  <!-- BOTTOM-RIGHT big sweep -->
+  <path
+    d="
+      M -260 820
+      C 160 720, 600 860, 960 800
+      S 1460 660, 1760 760
+    "
+    fill="none"
+    stroke="url(#strokeBR)"
+    stroke-width="78"
+    stroke-linecap="round"
+    filter="url(#softBlur)"
+  />
+
+  <!-- BOTTOM-RIGHT thin -->
+  <path
+    d="
+      M -260 880
+      C 220 790, 680 920, 1040 860
+      S 1500 740, 1760 830
+    "
+    fill="none"
+    stroke="url(#strokeBR)"
+    stroke-width="18"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+
+  <!-- BOTTOM-RIGHT mid -->
+  <path
+    d="
+      M -260 935
+      C 280 865, 760 980, 1120 930
+      S 1540 840, 1760 900
+    "
+    fill="none"
+    stroke="url(#strokeBR)"
+    stroke-width="46"
+    stroke-linecap="round"
+    opacity="0.55"
+    filter="url(#softBlur)"
+  />
+</svg>
