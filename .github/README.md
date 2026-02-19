@@ -106,7 +106,7 @@ nano .env  # Edit with actual credentials
 
 ## Future Enhancements
 
-- [ ] Add frontend testing when React app is initialized
+- [ ] Add frontend testing when Next.js app tests are configured
 - [ ] Add code quality checks (linting, formatting)
 - [ ] Add security scanning
 - [ ] Add staging environment deployment

@@ -1,89 +1,129 @@
-# CodeIntegrity - Academic Integrity Checker
+# Academic FBI — Academic Integrity Submission and Similarity Analysis System
 
-A web-based plagiarism detection system for academic code submissions. The system analyzes source code submissions for similarities, helping instructors maintain academic integrity standards.
+A web-based source-code similarity analysis platform for academic integrity. Instructors upload student code submissions and compare them — against each other and against historical repositories — to identify potential plagiarism. The system supports C, C++, and Java, uses a custom-built analysis engine (no external AI services), and anonymizes all student data to comply with FIPPA.
 
-## 📋 Project Overview
+## Team
 
-This system allows instructors to:
-- Receive and manage student code submissions
-- Analyze submissions for code similarity against other submissions and historical repositories
-- View detailed similarity reports in a user-friendly web interface
-- Maintain student confidentiality through anonymization
+COSC 4P02 — Software Engineering II, Brock University, Winter 2026 — Group 20
 
-### Key Features
+| Name | Role |
+|------|------|
+| Darsh Kurmi | Team member |
+| Riya Shah | Team member |
+| Rishi Modi | Team member |
+| Rimon Paul | Team member |
+| Ansh Shah | Team member |
+| Manu Saini | Team member |
+| Paril Gabani | Team member |
 
-- **Multi-language Support**: C, C++, and Java
-- **Repository Management**: Compare against current class submissions, previous offerings, or custom repositories
-- **Similarity Analysis Engine**: Custom-built comparison algorithm (no external AI dependencies)
-- **Anonymization**: FIPPA-compliant handling of student information
-- **Web-based Interface**: Accessible from any browser
+## User Roles
 
-## 🏗️ Project Structure
+| Role | Description |
+|------|-------------|
+| **Student** | Select institution, verify assignment key, upload code submissions, resubmit before deadline |
+| **Instructor** | Manage courses/assignments, manage comparison repositories, run similarity analysis, view/export reports, compare flagged submissions side-by-side |
+| **Administrator** | Manage instructor accounts and courses, configure global system settings, view activity logs |
 
-```
-├── backend/                    # Server-side application
-│   ├── src/
-│   │   ├── api/               # REST API endpoints
-│   │   ├── analysis/          # Code similarity analysis engine
-│   │   │   ├── tokenizer/     # Language-specific tokenizers
-│   │   │   ├── comparator/    # Similarity comparison algorithms
-│   │   │   └── fingerprint/   # Code fingerprinting utilities
-│   │   ├── models/            # Database models
-│   │   ├── services/          # Business logic
-│   │   ├── utils/             # Helper utilities
-│   │   └── config/            # Configuration files
-│   ├── tests/                 # Backend tests
-│   └── requirements.txt       # Python dependencies
-│
-├── frontend/                   # Client-side application
-│   ├── src/
-│   │   ├── components/        # Reusable UI components
-│   │   ├── pages/             # Page components
-│   │   ├── services/          # API communication
-│   │   ├── store/             # State management
-│   │   └── utils/             # Frontend utilities
-│   ├── public/                # Static assets
-│   └── package.json           # Node.js dependencies
-│
-├── database/                   # Database schemas and migrations
-│   ├── migrations/
-│   └── seeds/
-│
-├── repositories/               # Stored code repositories for comparison
-│   └── .gitkeep
-│
-├── docs/                       # Documentation
-│   ├── api/                   # API documentation
-│   ├── architecture/          # System architecture docs
-│   └── user-guide/            # User documentation
-│
-├── scripts/                    # Utility scripts
-│
-├── docker-compose.yml          # Docker configuration
-├── .gitignore
-├── .env.example               # Environment variables template
-└── README.md
-```
+## Features
 
-## 🛠️ Technology Stack
+- **Multi-language support** — C, C++, and Java
+- **Repository management** — Compare against current-class submissions, previous offerings, or custom instructor-uploaded repositories
+- **Similarity analysis engine** — Custom in-house pipeline (no external AI); see [Analysis Pipeline](#analysis-pipeline) below
+- **Anonymization** — Tokenized identifiers replace student names throughout analysis and reports
+- **Side-by-side comparison** — Highlighted diff view of flagged submission pairs
+- **Batch analysis** — Process entire assignment submission sets at once
+- **Export & download** — PDF/CSV reports and raw submission downloads
+- **Role-based access control** — Separate permissions for Students, Instructors, and Administrators
+
+## Architecture
+
+The system follows a **4-layer architecture** (SRS Section 8.4):
+
+| Layer | Technology | Responsibility |
+|-------|-----------|----------------|
+| **UI Layer** | Next.js 16 + React 19 | Frontend SPA — dashboard, upload, reports, admin views |
+| **Server Layer** | FastAPI (Python) | REST API — authentication, RBAC, business logic, job orchestration |
+| **Data Layer** | PostgreSQL + file storage | Relational data (users, courses, results) and raw submission files |
+| **Computation Layer** | Background workers | Similarity analysis pipeline — parsing, fingerprinting, comparison |
+
+## Analysis Pipeline
+
+Submissions flow through a 7-stage pipeline (SRS Section 8.5):
+
+1. **Input** — Receive uploaded source files
+2. **Parsing** — Language-specific lexing / AST extraction
+3. **Normalization** — Strip comments, normalize identifiers and whitespace
+4. **Feature Extraction** — Extract structural and syntactic features
+5. **Fingerprinting** — Generate hash fingerprints (winnowing / n-gram)
+6. **Similarity Measurement** — Compare fingerprint sets across submissions and repositories
+7. **Result Aggregation** — Produce per-pair similarity scores and flag threshold violations
+
+> **Note:** The comparison engine is developed entirely in-house. No external AI services are used for code comparison.
+
+## Technology Stack
 
 | Component | Technology |
 |-----------|------------|
-| Backend | Python (Flask/FastAPI) |
-| Frontend | React.js |
-| Database | PostgreSQL |
+| Backend | Python 3.10+ / FastAPI |
+| Frontend | Next.js 16 / React 19 / TypeScript |
+| Database | PostgreSQL 14+ |
 | Cache | Redis |
-| Containerization | Docker |
-| Web Server | Nginx |
+| Containerization | Docker / Docker Compose |
+| Hosting | OVH VPS |
+| CI/CD | GitHub Actions |
 
-## 🚀 Getting Started
+## Project Structure
+
+```
+4P02-Project/
+├── backend/                     # FastAPI backend
+│   ├── src/
+│   │   ├── api/                 # REST API endpoints
+│   │   ├── analysis/            # Similarity analysis engine
+│   │   │   ├── tokenizer/       # Language-specific tokenizers
+│   │   │   ├── comparator/      # Similarity comparison algorithms
+│   │   │   └── fingerprint/     # Code fingerprinting utilities
+│   │   ├── models/              # Database models
+│   │   ├── services/            # Business logic
+│   │   ├── utils/               # Helper utilities
+│   │   └── config/              # Configuration
+│   ├── tests/                   # Backend tests
+│   └── requirements.txt
+│
+├── frontend/
+│   └── my-app/                  # Next.js frontend
+│       ├── app/                 # App router pages
+│       ├── components/          # UI components
+│       ├── lib/                 # Utilities
+│       ├── public/              # Static assets
+│       └── package.json
+│
+├── database/                    # Database schemas and migrations
+│   ├── migrations/
+│   └── seeds/
+│
+├── repositories/                # Stored code repositories for comparison
+│
+├── docs/                        # Documentation
+│   ├── api/                     # API reference
+│   ├── architecture/            # Architecture overview
+│   └── user-guide/              # User documentation
+│
+├── scripts/                     # Utility scripts
+├── .github/workflows/           # CI/CD pipeline
+├── docker-compose.yml
+├── .env.example
+└── .gitignore
+```
+
+## Getting Started
 
 ### Prerequisites
 
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL 14+
-- Docker & Docker Compose (optional)
+- Docker & Docker Compose (recommended)
 
 ### Installation
 
@@ -103,7 +143,7 @@ This system allows instructors to:
 
 3. **Set up the frontend**
    ```bash
-   cd frontend
+   cd frontend/my-app
    npm install
    ```
 
@@ -113,18 +153,15 @@ This system allows instructors to:
    # Edit .env with your configuration
    ```
 
-5. **Initialize the database**
-   ```bash
-   # Instructions to be added
-   ```
-
-6. **Run the application**
+5. **Run the application**
    ```bash
    # Backend
-   cd backend && python run.py
+   cd backend
+   uvicorn src.main:app --reload
 
    # Frontend (separate terminal)
-   cd frontend && npm start
+   cd frontend/my-app
+   npm run dev
    ```
 
 ### Using Docker
@@ -133,32 +170,20 @@ This system allows instructors to:
 docker-compose up --build
 ```
 
-## 📊 Similarity Analysis Engine
+## Privacy & Security
 
-The core comparison engine uses a multi-phase approach:
+- **Anonymization** — Student names are replaced with tokenized identifiers before analysis
+- **No code execution** — Uploaded code is never executed; only static analysis is performed
+- **Malware scanning** — Submissions are scanned before processing
+- **RBAC** — Role-based access control restricts data visibility per role
+- **Encryption** — PII is encrypted at rest
+- **FIPPA-compliant** — Data handling follows applicable Canadian privacy regulations
 
-1. **Tokenization**: Source code is parsed into language-specific tokens
-2. **Normalization**: Variable names, comments, and whitespace are normalized
-3. **Fingerprinting**: Code segments are converted to hash fingerprints
-4. **Comparison**: Fingerprints are compared using algorithms like:
-   - Winnowing algorithm
-   - N-gram analysis
-   - AST (Abstract Syntax Tree) comparison
+## API Documentation
 
-> ⚠️ **Note**: The comparison engine is developed in-house. No external AI services are used for code comparison to ensure compliance with project requirements.
+API documentation is auto-generated by FastAPI and available at `/docs` (Swagger UI) or `/redoc` when the server is running. See also [docs/api](docs/api).
 
-## 🔒 Privacy & Security
-
-- All submissions are anonymized before processing
-- Personal identifiable information (PII) is encrypted at rest
-- FIPPA-compliant data handling
-- Role-based access control (RBAC)
-
-## 📖 API Documentation
-
-API documentation is available at `/api/docs` when running the server, or in the [docs/api](docs/api) directory.
-
-## 🧪 Testing
+## Testing
 
 ```bash
 # Backend tests
@@ -166,19 +191,11 @@ cd backend
 pytest
 
 # Frontend tests
-cd frontend
+cd frontend/my-app
 npm test
 ```
 
-## 👥 Team
-
-COSC 4P02 - Software Engineering II - Winter 2026
-
-## 📄 License
-
-This project is developed for academic purposes as part of COSC 4P02 at Brock University.
-
-## 🤝 Contributing
+## Contributing
 
 1. Create a feature branch (`git checkout -b feature/amazing-feature`)
 2. Commit your changes (`git commit -m 'Add amazing feature'`)
@@ -187,4 +204,4 @@ This project is developed for academic purposes as part of COSC 4P02 at Brock Un
 
 ---
 
-**Note**: This system is designed for educational institution use and must be deployed in compliance with applicable privacy regulations.
+This project is developed for academic purposes as part of COSC 4P02 at Brock University and must be deployed in compliance with applicable privacy regulations.
