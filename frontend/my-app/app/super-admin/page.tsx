@@ -1,22 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { Users, UserCheck, GraduationCap } from "lucide-react";
+import { School, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 
-interface AdminStats {
-  instructor_count: number;
-  student_count: number;
-  course_count: number;
+interface DashboardStats {
+  universities_count: number;
+  total_admins: number;
 }
 
-export default function AdminDashboard() {
-  const [stats, setStats] = React.useState<AdminStats | null>(null);
+export default function SuperAdminDashboard() {
+  const [stats, setStats] = React.useState<DashboardStats | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    apiFetch<AdminStats>("/api/admin/dashboard")
+    apiFetch<DashboardStats>("/api/super-admin/dashboard")
       .then(setStats)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -24,27 +23,22 @@ export default function AdminDashboard() {
 
   const cards = [
     {
-      title: "Instructors",
-      value: stats?.instructor_count ?? "-",
+      title: "Active Universities",
+      value: stats?.universities_count ?? "-",
+      icon: School,
+    },
+    {
+      title: "Total Admins",
+      value: stats?.total_admins ?? "-",
       icon: Users,
-    },
-    {
-      title: "Students",
-      value: stats?.student_count ?? "-",
-      icon: UserCheck,
-    },
-    {
-      title: "Courses",
-      value: stats?.course_count ?? "-",
-      icon: GraduationCap,
     },
   ];
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+      <h1 className="text-3xl font-bold mb-2">Platform Dashboard</h1>
       <p className="text-muted-foreground mb-8">
-        Overview of your university.
+        Overview of all universities on the platform.
       </p>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

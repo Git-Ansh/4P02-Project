@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { School, Zap, ChevronRight } from "lucide-react"
+import { School, Zap, ChevronRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,13 +21,35 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Label } from "@/components/ui/label"
+import { getUniversities, University } from "@/lib/api"
 
 interface HeroSectionProps {
+  selectedUni: string
+  onSelectUni: (value: string) => void
   onContinue: () => void
 }
 
-export function HeroSection({ onContinue }: HeroSectionProps) {
-  const [selectedUni, setSelectedUni] = React.useState("")
+export function HeroSection({ selectedUni, onSelectUni, onContinue }: HeroSectionProps) {
+  const [universities, setUniversities] = React.useState<University[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    async function fetchUniversities() {
+      try {
+        setLoading(true)
+        const data = await getUniversities()
+        setUniversities(data)
+      } catch (err) {
+        setError("Failed to load universities. Please try again later.")
+        console.error("Error fetching universities:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUniversities()
+  }, [])
 
   return (
     <section className="relative flex items-center justify-center">
@@ -65,29 +87,48 @@ export function HeroSection({ onContinue }: HeroSectionProps) {
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <Label htmlFor="university" className="sr-only">University</Label>
-                  <Select value={selectedUni} onValueChange={setSelectedUni}>
+                  <Select 
+                    value={selectedUni} 
+                    onValueChange={onSelectUni}
+                    disabled={loading}
+                  >
                     <SelectTrigger id="university" className="w-full">
                       <School className="mr-2 h-4 w-4 text-primary" />
-                      <SelectValue placeholder="Select your university" />
+                      {loading ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading universities...
+                        </span>
+                      ) : (
+                        <SelectValue placeholder="Select your university" />
+                      )}
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectLabel>Canadian Universities</SelectLabel>
-                        <SelectItem value="brock">Brock University</SelectItem>
-                        <SelectItem value="toronto">University of Toronto</SelectItem>
-                        <SelectItem value="york">York University</SelectItem>
-                        <SelectItem value="ubc">University of British Columbia</SelectItem>
-                        <SelectItem value="mcgill">McGill University</SelectItem>
-                        <SelectItem value="waterloo">University of Waterloo</SelectItem>
+                        <SelectLabel>Registered Universities</SelectLabel>
+                        {universities.length === 0 && !loading ? (
+                          <div className="px-2 py-3 text-sm text-muted-foreground">
+                            No universities available
+                          </div>
+                        ) : (
+                          universities.map((uni) => (
+                            <SelectItem key={uni.id} value={uni.slug}>
+                              {uni.name}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectGroup>
                     </SelectContent>
                   </Select>
+                  {error && (
+                    <p className="mt-2 text-sm text-destructive">{error}</p>
+                  )}
                 </div>
                 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
-                      disabled={!selectedUni}
+                      disabled={!selectedUni || loading}
                       onClick={onContinue}
                       className="w-full sm:w-auto"
                     >

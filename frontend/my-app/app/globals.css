@@ -106,6 +106,12 @@
   }
 }
 
+/* University-branded pages: neutralise the Tron neon in dark mode */
+.dark .university-theme {
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+}
+
 /* Tron Grid Background */
 .tron-grid {
   background-image: 
