@@ -1,6 +1,7 @@
 "use client"
 
-import { School, Landmark } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { School, Landmark, GraduationCap } from "lucide-react"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -13,9 +14,17 @@ import {
 interface RoleSelectionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  universitySlug: string
 }
 
-export function RoleSelectionDialog({ open, onOpenChange }: RoleSelectionDialogProps) {
+export function RoleSelectionDialog({ open, onOpenChange, universitySlug }: RoleSelectionDialogProps) {
+  const router = useRouter()
+
+  const handleRoleSelect = (role: string) => {
+    onOpenChange(false)
+    router.push(`/login?university=${encodeURIComponent(universitySlug)}&role=${role}`)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -26,7 +35,10 @@ export function RoleSelectionDialog({ open, onOpenChange }: RoleSelectionDialogP
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 pt-4">
-          <Card className="cursor-pointer hover:border-primary transition-colors">
+          <Card
+            className="cursor-pointer hover:border-primary transition-colors"
+            onClick={() => handleRoleSelect("admin")}
+          >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                 <Landmark className="h-6 w-6 text-primary" />
@@ -37,7 +49,10 @@ export function RoleSelectionDialog({ open, onOpenChange }: RoleSelectionDialogP
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary transition-colors">
+          <Card
+            className="cursor-pointer hover:border-primary transition-colors"
+            onClick={() => handleRoleSelect("instructor")}
+          >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                 <School className="h-6 w-6 text-primary" />
@@ -45,6 +60,20 @@ export function RoleSelectionDialog({ open, onOpenChange }: RoleSelectionDialogP
               <div>
                 <CardTitle className="text-base">Instructor</CardTitle>
                 <CardDescription>Create courses and review submissions</CardDescription>
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:border-primary transition-colors"
+            onClick={() => handleRoleSelect("student")}
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                <GraduationCap className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Student</CardTitle>
+                <CardDescription>Submit assignments and view results</CardDescription>
               </div>
             </CardContent>
           </Card>

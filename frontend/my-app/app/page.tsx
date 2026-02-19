@@ -10,21 +10,27 @@ import { TronGridBackground } from "@/components/tron-grid-background"
 
 export default function Page() {
   const [openContinueModal, setOpenContinueModal] = React.useState(false)
+  const [selectedUni, setSelectedUni] = React.useState("")
 
   return (
     <div className="min-h-screen flex flex-col">
       <TronGridBackground />
-      
+
       <Header />
 
       <main className="flex-1 relative w-full flex flex-col items-center">
-        <HeroSection onContinue={() => setOpenContinueModal(true)} />
+        <HeroSection
+          selectedUni={selectedUni}
+          onSelectUni={setSelectedUni}
+          onContinue={() => setOpenContinueModal(true)}
+        />
         <FeaturesSection />
       </main>
 
-      <RoleSelectionDialog 
-        open={openContinueModal} 
-        onOpenChange={setOpenContinueModal} 
+      <RoleSelectionDialog
+        open={openContinueModal}
+        onOpenChange={setOpenContinueModal}
+        universitySlug={selectedUni}
       />
 
       <Footer />

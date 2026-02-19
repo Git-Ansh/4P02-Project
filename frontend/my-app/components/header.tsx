@@ -87,9 +87,11 @@ export function Header() {
         <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="hidden sm:flex">
-                <Lock className="h-4 w-4" />
-              </Button>
+              <Link href="/login">
+                <Button variant="outline" size="icon" className="hidden sm:flex">
+                  <Lock className="h-4 w-4" />
+                </Button>
+              </Link>
             </TooltipTrigger>
             <TooltipContent>
               <p>Sign In</p>
@@ -127,10 +129,12 @@ export function Header() {
                   Contact
                 </Link>
                 <Separator />
-                <Button className="w-full">
-                  <Lock className="mr-2 h-4 w-4" />
-                  Sign In
-                </Button>
+                <Link href="/login">
+                  <Button className="w-full">
+                    <Lock className="mr-2 h-4 w-4" />
+                    Sign In
+                  </Button>
+                </Link>
               </nav>
             </SheetContent>
           </Sheet>
