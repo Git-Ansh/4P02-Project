@@ -12,7 +12,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ -- removed: conflicts with frontend/my-app/lib/
 lib64/
 parts/
 sdist/
@@ -22,13 +22,14 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+.claude/
 # Virtual environments
 venv/
 ENV/
 env/
 .venv/
-
+null
+nul
 # PyInstaller
 *.manifest
 *.spec
