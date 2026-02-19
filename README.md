@@ -8,13 +8,13 @@ COSC 4P02 — Software Engineering II, Brock University, Winter 2026 — Group 2
 
 | Name | Role |
 |------|------|
-| Darsh Kurmi | Team member |
-| Riya Shah | Team member |
-| Rishi Modi | Team member |
-| Rimon Paul | Team member |
-| Ansh Shah | Team member |
-| Manu Saini | Team member |
-| Paril Gabani | Team member |
+| Darsh Kurmi | Team Leader |
+| Riya Shah | Team member (Frontend) |
+| Rishi Modi | Team member (Backend) |
+| Rimon Paul | Team member (Backend) |
+| Ansh Shah | Team member (Full Stack) |
+| Manu Saini | Team member (Backend) |
+| Paril Gabani | Team member (Backend) |
 
 ## User Roles
 
