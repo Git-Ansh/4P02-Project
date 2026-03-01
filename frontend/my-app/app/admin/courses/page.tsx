@@ -30,10 +30,10 @@ export default function CoursesPage() {
   }, []);
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Courses</h1>
-        <p className="text-muted-foreground mt-1">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold">Courses</h1>
+        <p className="text-muted-foreground mt-1 text-sm sm:text-base">
           Courses created by instructors. This is a read-only view.
         </p>
       </div>

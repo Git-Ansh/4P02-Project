@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { GraduationCap, Users, Loader2 } from "lucide-react";
+import { GraduationCap, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 
 interface InstructorStats {
   course_count: number;
-  total_students: number;
 }
 
 export default function InstructorDashboard() {
@@ -19,7 +18,6 @@ export default function InstructorDashboard() {
   React.useEffect(() => {
     const user = getCurrentUser();
     if (user) {
-      // Extract display name from email (before @)
       setName(user.sub.split("@")[0]);
     }
     apiFetch<InstructorStats>("/api/instructor/dashboard")
@@ -34,20 +32,15 @@ export default function InstructorDashboard() {
       value: stats?.course_count ?? "-",
       icon: GraduationCap,
     },
-    {
-      title: "Total Students",
-      value: stats?.total_students ?? "-",
-      icon: Users,
-    },
   ];
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <h1 className="text-3xl font-bold mb-1">
         Welcome{name ? `, ${name}` : ""}
       </h1>
       <p className="text-muted-foreground mb-8">
-        Here is an overview of your courses and students.
+        Here is an overview of your courses.
       </p>
 
       {loading ? (

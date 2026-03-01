@@ -115,7 +115,7 @@ mailmap
 *.key
 secrets/
 .secrets
-
+AGENTS.md
 # =========================
 # Database
 # =========================

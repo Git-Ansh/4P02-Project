@@ -66,8 +66,6 @@ export function getDashboardPath(role: string): string {
       return "/admin";
     case "instructor":
       return "/instructor";
-    case "student":
-      return "/student";
     default:
       return "/";
   }

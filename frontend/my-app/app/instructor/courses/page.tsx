@@ -6,7 +6,6 @@ import {
   Plus,
   Trash2,
   Pencil,
-  Users,
   CalendarDays,
   SearchIcon,
   Loader2,
@@ -48,7 +47,6 @@ interface Course {
   description: string | null;
   instructor_email: string;
   instructor_name: string;
-  student_count: number;
   created_at: string;
 }
 
@@ -84,13 +82,11 @@ export default function InstructorCoursesPage() {
     }
   };
 
-  // Derive unique terms for filter
   const terms = React.useMemo(() => {
     const set = new Set(courses.map((c) => c.term));
     return Array.from(set).sort();
   }, [courses]);
 
-  // Filter courses by search + term
   const filtered = React.useMemo(() => {
     return courses.filter((c) => {
       const matchesTerm = termFilter === "all" || c.term === termFilter;
@@ -103,13 +99,13 @@ export default function InstructorCoursesPage() {
   }, [courses, termFilter, search]);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">My Courses</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your courses, assignments, and students.
+          <h1 className="text-2xl sm:text-3xl font-bold">My Courses</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+            Manage your courses and assignments.
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -179,7 +175,6 @@ export default function InstructorCoursesPage() {
             <Card key={course.id} className="relative group hover:shadow-md transition-shadow">
               <Link href={`/instructor/courses/${course.id}`} className="block">
                 <CardContent className="p-5">
-                  {/* Course header */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="text-xl font-semibold text-primary">
@@ -192,18 +187,10 @@ export default function InstructorCoursesPage() {
                     <ChevronRight className="h-5 w-5 text-muted-foreground/40 group-hover:text-primary transition-colors mt-1" />
                   </div>
 
-                  {/* Meta */}
                   <div className="mt-4 space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <CalendarDays className="h-4 w-4" />
                       <span>{course.term}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      <span>
-                        {course.student_count} student
-                        {course.student_count !== 1 ? "s" : ""} enrolled
-                      </span>
                     </div>
                   </div>
 
@@ -214,7 +201,6 @@ export default function InstructorCoursesPage() {
                   )}
                 </CardContent>
               </Link>
-              {/* Actions — outside the link to prevent nested interactive elements */}
               <div className="px-5 pb-4 flex gap-2">
                 <Button
                   variant="outline"
@@ -237,8 +223,8 @@ export default function InstructorCoursesPage() {
                         Delete &quot;{course.code}&quot;?
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will permanently delete this course and remove all
-                        enrolled students and assignments. This action cannot be undone.
+                        This will permanently delete this course and all its
+                        assignments. This action cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

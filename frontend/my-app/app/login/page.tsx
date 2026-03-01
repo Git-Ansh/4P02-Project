@@ -90,9 +90,7 @@ export default function LoginPage() {
       ? "Administrator"
       : preselectedRole === "instructor"
         ? "Instructor"
-        : preselectedRole === "student"
-          ? "Student"
-          : "";
+        : "";
 
   // CSS variable overrides for university theme (works in both light & dark)
   const themeStyle = React.useMemo(() => buildThemeStyle(theme), [theme]);
@@ -117,7 +115,7 @@ export default function LoginPage() {
 
   return (
     <div className={`min-h-screen flex flex-col${isUniLogin ? " university-theme" : ""}`} style={themeStyle}>
-      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex-1 flex items-center justify-center px-4 py-8">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             {isUniLogin && theme ? (

@@ -4,10 +4,16 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Code2, LogOut, Loader2 } from "lucide-react";
+import { Code2, LogOut, Loader2, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { getCurrentUser, logout } from "@/lib/auth";
 import {
   getUniversityTheme,
@@ -27,10 +33,95 @@ interface UniversityLayoutProps {
   children: React.ReactNode;
 }
 
+function SidebarContent({
+  theme,
+  navItems,
+  pathname,
+  onNavigate,
+}: {
+  theme: UniversityTheme | null;
+  navItems: NavItem[];
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {/* University branding */}
+      <div className="flex items-center gap-3 px-6 py-5">
+        {theme?.logo_url ? (
+          <Image
+            src={theme.logo_url}
+            alt={theme.name}
+            width={36}
+            height={36}
+            className="rounded"
+          />
+        ) : (
+          <div className="flex h-9 w-9 items-center justify-center rounded bg-primary/10 text-primary font-bold text-lg">
+            {theme?.name?.charAt(0) || "U"}
+          </div>
+        )}
+        <span className="text-lg font-bold tracking-tight truncate">
+          {theme?.name || "University"}
+        </span>
+      </div>
+      <Separator />
+
+      {/* Navigation */}
+      <nav className="flex-1 px-4 py-4 space-y-1">
+        {navItems.map((item) => {
+          const active = item.exact
+            ? pathname === item.href
+            : pathname.startsWith(item.href);
+          return (
+            <Button
+              key={item.href}
+              asChild
+              variant={active ? "secondary" : "ghost"}
+              className="w-full justify-start gap-3"
+              onClick={onNavigate}
+            >
+              <Link href={item.href}>
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            </Button>
+          );
+        })}
+      </nav>
+
+      {/* Footer area */}
+      <Separator />
+      <div className="px-4 py-3 flex items-center justify-between">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2 text-muted-foreground"
+          onClick={logout}
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </Button>
+        <ThemeToggle />
+      </div>
+      <div className="px-4 pb-4">
+        <Link
+          href="/"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+        >
+          <Code2 className="h-3 w-3" />
+          Powered by AcademicFBI
+        </Link>
+      </div>
+    </>
+  );
+}
+
 export function UniversityLayout({ navItems, children }: UniversityLayoutProps) {
   const pathname = usePathname();
   const [theme, setTheme] = React.useState<UniversityTheme | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
 
   React.useEffect(() => {
     const user = getCurrentUser();
@@ -72,78 +163,53 @@ export function UniversityLayout({ navItems, children }: UniversityLayoutProps) 
 
   return (
     <div className="flex min-h-screen university-theme" style={themeStyle}>
-      {/* Sidebar */}
-      <aside className="w-64 border-r bg-background flex flex-col">
-        {/* University branding */}
-        <div className="flex items-center gap-3 px-6 py-5">
-          {theme?.logo_url ? (
-            <Image
-              src={theme.logo_url}
-              alt={theme.name}
-              width={36}
-              height={36}
-              className="rounded"
-            />
-          ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded bg-primary/10 text-primary font-bold text-lg">
-              {theme?.name?.charAt(0) || "U"}
-            </div>
-          )}
-          <span className="text-lg font-bold tracking-tight truncate">
-            {theme?.name || "University"}
-          </span>
-        </div>
-        <Separator />
-
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-4 space-y-1">
-          {navItems.map((item) => {
-            const active = item.exact
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
-            return (
-              <Button
-                key={item.href}
-                asChild
-                variant={active ? "secondary" : "ghost"}
-                className="w-full justify-start gap-3"
-              >
-                <Link href={item.href}>
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              </Button>
-            );
-          })}
-        </nav>
-
-        {/* Footer area */}
-        <Separator />
-        <div className="px-4 py-3 flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-muted-foreground"
-            onClick={logout}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </Button>
-          <ThemeToggle />
-        </div>
-        <div className="px-4 pb-4">
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-          >
-            <Code2 className="h-3 w-3" />
-            Powered by AcademicFBI
-          </Link>
-        </div>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-64 border-r bg-background flex-col">
+        <SidebarContent theme={theme} navItems={navItems} pathname={pathname} />
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      {/* Mobile header + sheet */}
+      <div className="flex-1 flex flex-col">
+        <header className="md:hidden flex items-center justify-between border-b bg-background px-4 py-3">
+          <div className="flex items-center gap-2">
+            {theme?.logo_url ? (
+              <Image
+                src={theme.logo_url}
+                alt={theme.name}
+                width={28}
+                height={28}
+                className="rounded"
+              />
+            ) : (
+              <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary font-bold text-sm">
+                {theme?.name?.charAt(0) || "U"}
+              </div>
+            )}
+            <span className="font-bold truncate">
+              {theme?.name || "University"}
+            </span>
+          </div>
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <SidebarContent
+                theme={theme}
+                navItems={navItems}
+                pathname={pathname}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            </SheetContent>
+          </Sheet>
+        </header>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">{children}</main>
+      </div>
     </div>
   );
 }

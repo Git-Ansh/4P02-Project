@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { School, Landmark, GraduationCap } from "lucide-react"
+import { School, Landmark, FileUp } from "lucide-react"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -23,6 +23,11 @@ export function RoleSelectionDialog({ open, onOpenChange, universitySlug }: Role
   const handleRoleSelect = (role: string) => {
     onOpenChange(false)
     router.push(`/login?university=${encodeURIComponent(universitySlug)}&role=${role}`)
+  }
+
+  const handleSubmitAssignment = () => {
+    onOpenChange(false)
+    router.push(`/submit?university=${encodeURIComponent(universitySlug)}`)
   }
 
   return (
@@ -65,15 +70,15 @@ export function RoleSelectionDialog({ open, onOpenChange, universitySlug }: Role
           </Card>
           <Card
             className="cursor-pointer hover:border-primary transition-colors"
-            onClick={() => handleRoleSelect("student")}
+            onClick={handleSubmitAssignment}
           >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                <GraduationCap className="h-6 w-6 text-primary" />
+                <FileUp className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-base">Student</CardTitle>
-                <CardDescription>Submit assignments and view results</CardDescription>
+                <CardTitle className="text-base">Submit Assignment</CardTitle>
+                <CardDescription>Submit your code files with a token</CardDescription>
               </div>
             </CardContent>
           </Card>

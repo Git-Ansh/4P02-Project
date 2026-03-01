@@ -72,11 +72,11 @@ export default function InstructorsPage() {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Instructors</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold">Instructors</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Manage instructors at your university.
           </p>
         </div>
@@ -116,13 +116,13 @@ export default function InstructorsPage() {
         </p>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead className="hidden sm:table-cell">Created</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
@@ -133,7 +133,7 @@ export default function InstructorsPage() {
                       {user.full_name}
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {new Date(user.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
