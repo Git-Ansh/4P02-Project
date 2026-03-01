@@ -70,7 +70,7 @@ class UserCreate(BaseModel):
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
-        allowed = {"admin", "instructor", "student"}
+        allowed = {"admin", "instructor"}
         if v not in allowed:
             raise ValueError(f"Role must be one of: {', '.join(sorted(allowed))}")
         return v
@@ -91,8 +91,8 @@ class DashboardStats(BaseModel):
 
 class AdminDashboardStats(BaseModel):
     instructor_count: int
-    student_count: int
     course_count: int
+    student_record_count: int
 
 
 class UniversityUpdate(BaseModel):
@@ -130,13 +130,11 @@ class CourseResponse(BaseModel):
     description: Optional[str] = None
     instructor_email: str
     instructor_name: str
-    student_count: int
     created_at: datetime
 
 
 class InstructorDashboardStats(BaseModel):
     course_count: int
-    total_students: int
 
 
 class AssignmentCreate(BaseModel):
@@ -144,6 +142,8 @@ class AssignmentCreate(BaseModel):
     description: Optional[str] = None
     due_date: Optional[datetime] = None
     max_score: float = Field(default=100, gt=0)
+    allow_resubmission: bool = False
+    language: str = Field(min_length=1)
 
 
 class AssignmentUpdate(BaseModel):
@@ -151,6 +151,8 @@ class AssignmentUpdate(BaseModel):
     description: Optional[str] = None
     due_date: Optional[datetime] = None
     max_score: Optional[float] = Field(default=None, gt=0)
+    allow_resubmission: Optional[bool] = None
+    language: Optional[str] = None
 
 
 class AssignmentResponse(BaseModel):
@@ -160,6 +162,8 @@ class AssignmentResponse(BaseModel):
     description: Optional[str] = None
     due_date: Optional[datetime] = None
     max_score: float
+    allow_resubmission: bool
+    language: str
     created_at: datetime
 
 
@@ -174,3 +178,86 @@ class UniversityDetailResponse(BaseModel):
     status: str
     created_at: datetime
     admin_count: int
+
+
+# ── Student Records (admin-managed, no login) ──────────────────────────────
+
+
+class StudentRecordCreate(BaseModel):
+    full_name: str = Field(min_length=1)
+    email: EmailStr
+    student_number: str = Field(min_length=1)
+    course_ids: list[str] = Field(default_factory=list)
+
+
+class StudentRecordUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    student_number: Optional[str] = None
+    course_ids: Optional[list[str]] = None
+
+
+class StudentRecordResponse(BaseModel):
+    id: str
+    full_name: str
+    email: str
+    student_number: str
+    courses: list[dict]
+    created_at: datetime
+
+
+# ── Submission Tokens ───────────────────────────────────────────────────────
+
+
+class SubmissionTokenResponse(BaseModel):
+    token: str
+    expires_at: datetime
+
+
+# ── Public Assignment (decoded from token) ──────────────────────────────────
+
+
+class PublicAssignmentResponse(BaseModel):
+    university_name: str
+    university_slug: str
+    instructor_name: str
+    course_code: str
+    course_title: str
+    assignment_id: str
+    assignment_title: str
+    assignment_description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    max_score: float
+    allow_resubmission: bool
+    language: str
+
+
+# ── Submissions ─────────────────────────────────────────────────────────────
+
+
+class SubmissionFileInfo(BaseModel):
+    name: str
+    size: int
+
+
+class SubmissionResponse(BaseModel):
+    id: str
+    assignment_id: str
+    course_id: str
+    student_name: str
+    student_email: str
+    student_number: str
+    language: str
+    comment: Optional[str] = None
+    files: list[SubmissionFileInfo]
+    submitted_at: datetime
+
+
+class AnonymousSubmissionResponse(BaseModel):
+    id: str
+    assignment_id: str
+    course_id: str
+    language: str
+    comment: Optional[str] = None
+    files: list[SubmissionFileInfo]
+    submitted_at: datetime

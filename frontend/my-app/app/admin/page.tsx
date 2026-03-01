@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 
 interface AdminStats {
   instructor_count: number;
-  student_count: number;
+  student_record_count: number;
   course_count: number;
 }
 
@@ -29,8 +29,8 @@ export default function AdminDashboard() {
       icon: Users,
     },
     {
-      title: "Students",
-      value: stats?.student_count ?? "-",
+      title: "Student Records",
+      value: stats?.student_record_count ?? "-",
       icon: UserCheck,
     },
     {
@@ -41,7 +41,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
       <p className="text-muted-foreground mb-8">
         Overview of your university.

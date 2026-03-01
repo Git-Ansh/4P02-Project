@@ -16,7 +16,6 @@ const ROLE_ROUTES: Record<string, string[]> = {
   super_admin: ["/super-admin"],
   admin: ["/admin"],
   instructor: ["/instructor"],
-  student: ["/student"],
 };
 
 export function middleware(request: NextRequest) {
@@ -26,6 +25,7 @@ export function middleware(request: NextRequest) {
   if (
     pathname === "/" ||
     pathname === "/login" ||
+    pathname.startsWith("/submit") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.includes(".")

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.auth import router as auth_router
 from src.api.instructor import router as instructor_router
+from src.api.submission import router as submission_router
 from src.api.super_admin import router as super_admin_router
 from src.api.university_admin import router as admin_router
 from src.config.database import connect_db, close_db, get_client, get_main_db
@@ -35,6 +36,7 @@ app.include_router(auth_router)
 app.include_router(super_admin_router)
 app.include_router(admin_router)
 app.include_router(instructor_router)
+app.include_router(submission_router)
 
 
 @app.get("/health")

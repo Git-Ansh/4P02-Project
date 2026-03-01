@@ -9,11 +9,14 @@ import {
   Pencil,
   ArrowLeft,
   CalendarDays,
-  Users,
   Loader2,
   AlertCircle,
   ClipboardList,
   Trophy,
+  Key,
+  Copy,
+  Check,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +44,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -52,7 +70,6 @@ interface Course {
   term: string;
   description: string | null;
   instructor_name: string;
-  student_count: number;
 }
 
 interface Assignment {
@@ -62,7 +79,17 @@ interface Assignment {
   description: string | null;
   due_date: string | null;
   max_score: number;
+  allow_resubmission: boolean;
+  language: string;
   created_at: string;
+}
+
+interface Submission {
+  id: string;
+  language: string;
+  comment: string | null;
+  files: { name: string; size: number }[];
+  submitted_at: string;
 }
 
 export default function CourseDetailPage() {
@@ -77,6 +104,21 @@ export default function CourseDetailPage() {
   const [editAssignment, setEditAssignment] = React.useState<Assignment | null>(
     null,
   );
+
+  // Token dialog state
+  const [tokenDialogOpen, setTokenDialogOpen] = React.useState(false);
+  const [tokenValue, setTokenValue] = React.useState("");
+  const [tokenExpiry, setTokenExpiry] = React.useState("");
+  const [tokenLoading, setTokenLoading] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  // Submissions dialog state
+  const [submissionsDialogOpen, setSubmissionsDialogOpen] =
+    React.useState(false);
+  const [submissions, setSubmissions] = React.useState<Submission[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = React.useState(false);
+  const [submissionsAssignment, setSubmissionsAssignment] =
+    React.useState<Assignment | null>(null);
 
   const fetchCourse = React.useCallback(async () => {
     try {
@@ -118,6 +160,48 @@ export default function CourseDetailPage() {
     }
   };
 
+  const handleGenerateToken = async (assignment: Assignment) => {
+    setTokenDialogOpen(true);
+    setTokenLoading(true);
+    setTokenValue("");
+    setTokenExpiry("");
+    setCopied(false);
+    try {
+      const data = await apiFetch<{ token: string; expires_at: string }>(
+        `/api/instructor/courses/${courseId}/assignments/${assignment.id}/token`,
+        { method: "POST" },
+      );
+      setTokenValue(data.token);
+      setTokenExpiry(data.expires_at);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  const handleCopyToken = () => {
+    navigator.clipboard.writeText(tokenValue);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleViewSubmissions = async (assignment: Assignment) => {
+    setSubmissionsAssignment(assignment);
+    setSubmissionsDialogOpen(true);
+    setSubmissionsLoading(true);
+    try {
+      const data = await apiFetch<Submission[]>(
+        `/api/instructor/courses/${courseId}/assignments/${assignment.id}/submissions`,
+      );
+      setSubmissions(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-24">
@@ -131,30 +215,29 @@ export default function CourseDetailPage() {
   const now = new Date();
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Breadcrumb / Back */}
       <Link
         href="/instructor/courses"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 sm:mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Courses
       </Link>
 
       {/* Course header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="mb-6 sm:mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-primary">{course.code}</h1>
-          <p className="text-lg text-muted-foreground mt-1">{course.title}</p>
-          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold text-primary">
+            {course.code}
+          </h1>
+          <p className="text-base sm:text-lg text-muted-foreground mt-1">
+            {course.title}
+          </p>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <CalendarDays className="h-4 w-4" />
               {course.term}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Users className="h-4 w-4" />
-              {course.student_count} student
-              {course.student_count !== 1 ? "s" : ""}
             </span>
           </div>
           {course.description && (
@@ -166,9 +249,9 @@ export default function CourseDetailPage() {
       </div>
 
       {/* Assignments section */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-semibold">Assignments</h2>
+          <h2 className="text-lg sm:text-xl font-semibold">Assignments</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             {assignments.length} assignment
             {assignments.length !== 1 ? "s" : ""}
@@ -214,73 +297,103 @@ export default function CourseDetailPage() {
 
             return (
               <Card key={a.id}>
-                <CardContent className="p-5 flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-medium truncate">{a.title}</h3>
-                      {isPast && (
-                        <Badge variant="secondary" className="text-xs">
-                          Past Due
-                        </Badge>
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3">
+                        <h3 className="font-medium truncate">{a.title}</h3>
+                        {isPast && (
+                          <Badge variant="secondary" className="text-xs">
+                            Past Due
+                          </Badge>
+                        )}
+                        {a.language && (
+                          <Badge variant="secondary" className="text-xs">
+                            {{"c": "C", "cpp": "C++", "java": "Java", "python": "Python"}[a.language] || a.language}
+                          </Badge>
+                        )}
+                        {a.allow_resubmission && (
+                          <Badge variant="outline" className="text-xs">
+                            Resubmission
+                          </Badge>
+                        )}
+                      </div>
+                      {a.description && (
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                          {a.description}
+                        </p>
                       )}
-                    </div>
-                    {a.description && (
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                        {a.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      {dueDate && (
+                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                        {dueDate && (
+                          <span className="flex items-center gap-1">
+                            <CalendarDays className="h-3.5 w-3.5" />
+                            Due{" "}
+                            {dueDate.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
-                          <CalendarDays className="h-3.5 w-3.5" />
-                          Due{" "}
-                          {dueDate.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
+                          <Trophy className="h-3.5 w-3.5" />
+                          {a.max_score} pts
                         </span>
-                      )}
-                      <span className="flex items-center gap-1">
-                        <Trophy className="h-3.5 w-3.5" />
-                        {a.max_score} pts
-                      </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditAssignment(a)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Delete &quot;{a.title}&quot;?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently remove this assignment.
-                            This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDeleteAssignment(a.id)}
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <div className="flex items-center gap-2 sm:ml-4 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleGenerateToken(a)}
+                        title="Generate Token"
+                      >
+                        <Key className="h-3.5 w-3.5 mr-1" />
+                        Token
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewSubmissions(a)}
+                        title="View Submissions"
+                      >
+                        <FileText className="h-3.5 w-3.5 mr-1" />
+                        Submissions
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditAssignment(a)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Delete &quot;{a.title}&quot;?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently remove this assignment. This
+                              action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteAssignment(a.id)}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -313,6 +426,105 @@ export default function CourseDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Token Dialog */}
+      <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submission Token</DialogTitle>
+            <DialogDescription>
+              Share this token with students so they can submit their work.
+            </DialogDescription>
+          </DialogHeader>
+          {tokenLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : tokenValue ? (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted p-3">
+                <code className="text-xs break-all select-all">
+                  {tokenValue}
+                </code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Expires:{" "}
+                  {new Date(tokenExpiry).toLocaleString()}
+                </span>
+                <Button size="sm" variant="outline" onClick={handleCopyToken}>
+                  {copied ? (
+                    <>
+                      <Check className="mr-1 h-3.5 w-3.5" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Failed to generate token.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Submissions Dialog */}
+      <Dialog
+        open={submissionsDialogOpen}
+        onOpenChange={setSubmissionsDialogOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Submissions — {submissionsAssignment?.title}
+            </DialogTitle>
+            <DialogDescription>
+              Anonymous submissions list.
+            </DialogDescription>
+          </DialogHeader>
+          {submissionsLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : submissions.length === 0 ? (
+            <p className="text-center text-muted-foreground py-6">
+              No submissions yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Language</TableHead>
+                  <TableHead>Files</TableHead>
+                  <TableHead>Submitted</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {submissions.map((s, index) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{s.language}</Badge>
+                    </TableCell>
+                    <TableCell>{s.files.length}</TableCell>
+                    <TableCell>
+                      {new Date(s.submitted_at).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -339,6 +551,12 @@ function AssignmentForm({
   const [maxScore, setMaxScore] = React.useState(
     String(assignment?.max_score ?? 100),
   );
+  const [allowResubmission, setAllowResubmission] = React.useState(
+    assignment?.allow_resubmission ?? false,
+  );
+  const [language, setLanguage] = React.useState(
+    assignment?.language || "",
+  );
   const [error, setError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -352,6 +570,8 @@ function AssignmentForm({
         description: description || null,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
         max_score: parseFloat(maxScore) || 100,
+        allow_resubmission: allowResubmission,
+        language,
       };
 
       if (isEdit) {
@@ -429,7 +649,30 @@ function AssignmentForm({
           />
         </div>
       </div>
-      <Button type="submit" disabled={submitting} className="mt-2">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="a-lang">Language</Label>
+        <Select value={language} onValueChange={setLanguage}>
+          <SelectTrigger id="a-lang" className="w-full">
+            <SelectValue placeholder="Select language" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="c">C</SelectItem>
+            <SelectItem value="cpp">C++</SelectItem>
+            <SelectItem value="java">Java</SelectItem>
+            <SelectItem value="python">Python</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={allowResubmission}
+          onChange={(e) => setAllowResubmission(e.target.checked)}
+          className="rounded border-input"
+        />
+        <span className="text-sm">Allow Resubmissions</span>
+      </label>
+      <Button type="submit" disabled={submitting || !language} className="mt-2">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {isEdit ? "Save Changes" : "Create Assignment"}
       </Button>

@@ -93,7 +93,7 @@ export default function UniversityDetailPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <Button asChild variant="ghost" size="sm" className="mb-4 gap-2">
         <Link href="/super-admin/universities">
           <ArrowLeft className="h-4 w-4" />
@@ -101,8 +101,8 @@ export default function UniversityDetailPage() {
         </Link>
       </Button>
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">University Admins</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">University Admins</h1>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -138,13 +138,13 @@ export default function UniversityDetailPage() {
         </p>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead className="hidden sm:table-cell">Created</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
@@ -155,7 +155,7 @@ export default function UniversityDetailPage() {
                       {admin.full_name}
                     </TableCell>
                     <TableCell>{admin.email}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {new Date(admin.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
