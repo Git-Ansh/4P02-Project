@@ -21,10 +21,13 @@ jobs:
         key: ${{ secrets.VPS_SSH_KEY }}
         passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
         port: ${{ secrets.VPS_PORT }}
+        envs: GITHUB_TOKEN
         script: |
+          set -e
           cd ~/COSC_4P02/Project/4P02-Project
 
-          # Pull latest changes
+          # Pull latest changes using GitHub token (no VPS credentials needed)
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/Git-Ansh/4P02-Project.git
           git fetch origin main
           git reset --hard origin/main
 
@@ -40,3 +43,5 @@ jobs:
           sudo systemctl restart academicfbi
 
           echo "Deployment completed successfully!"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
