@@ -10,10 +10,11 @@ from tree_sitter import Language, Parser
 import tree_sitter_java
 import tree_sitter_cpp
 
-# Configuration settings
-K_GRAM_SIZE = 12
-WINDOW_SIZE = 10
+# Tuned smaller for debugging with small test files
+K_GRAM_SIZE = 5
+WINDOW_SIZE = 4
 REPORT_LIMIT = 0.0
+SIMILARITY_THRESHOLD = 0.15  # Only pairs above this similarity will be reported
 
 # Mapping rules for Lexical tokens
 LEXICAL_MAP = {
@@ -88,6 +89,10 @@ def normalize_package(directory_path, student_id):
     files = []
     for root, _, filenames in os.walk(directory_path):
         for filename in filenames:
+            # Ignores ALL hidden files (starting with .) and macOS specific junk
+            if filename.startswith("._") or "__MACOSX" in root:
+                continue
+
             ext = os.path.splitext(filename)[1]
             if ext in valid_exts:
                 full_path = os.path.join(root, filename)
@@ -129,7 +134,8 @@ def kgrams(tokens, k=K_GRAM_SIZE):
         if window[0]["file"] != window[-1]["file"]:
             continue
 
-        content_str = "".join([t["t"] for t in window])
+        # Use space delimiter to avoid accidental token boundary collisions
+        content_str = " ".join([t["t"] for t in window])
         meta = {
             "hash": None,
             "file": window[0]["file"],
@@ -214,6 +220,183 @@ def compare_fingerprints(fp_a, fp_b):
     return score, matches
 
 
+# --- Helper functions ---
+def group_and_merge_matches(matches, min_block_size=3):
+    """
+    Groups matches by file pair and merges overlapping line ranges.
+    Returns compact region-level matches.
+    """
+    grouped = {}
+
+    for m in matches:
+        key = (m["file_a"], m["file_b"])
+        if key not in grouped:
+            grouped[key] = []
+        grouped[key].append(m)
+
+    merged_blocks = []
+
+    for (file_a, file_b), items in grouped.items():
+        # Sort by start lines
+        items.sort(key=lambda x: (x["start_a"], x["start_b"]))
+
+        current = None
+
+        for m in items:
+            if current is None:
+                current = {
+                    "file_a": file_a,
+                    "file_b": file_b,
+                    "start_a": m["start_a"],
+                    "end_a": m["end_a"],
+                    "start_b": m["start_b"],
+                    "end_b": m["end_b"],
+                    "hash_count": 1
+                }
+                continue
+
+            # Merge only if both A and B sides are roughly aligned
+            a_adjacent = m["start_a"] <= current["end_a"] + 1
+            b_adjacent = m["start_b"] <= current["end_b"] + 1
+
+            # Ensure structural alignment between A and B
+            a_offset = m["start_a"] - current["end_a"]
+            b_offset = m["start_b"] - current["end_b"]
+
+            aligned = abs(a_offset - b_offset) <= 2  # tolerance of 2 lines
+
+            if a_adjacent and b_adjacent and aligned:
+                current["end_a"] = max(current["end_a"], m["end_a"])
+                current["end_b"] = max(current["end_b"], m["end_b"])
+                current["hash_count"] += 1
+            else:
+                if (current["end_a"] - current["start_a"] + 1) >= min_block_size:
+                    merged_blocks.append(current)
+                current = {
+                    "file_a": file_a,
+                    "file_b": file_b,
+                    "start_a": m["start_a"],
+                    "end_a": m["end_a"],
+                    "start_b": m["start_b"],
+                    "end_b": m["end_b"],
+                    "hash_count": 1
+                }
+
+        if current and (current["end_a"] - current["start_a"] + 1) >= min_block_size:
+            merged_blocks.append(current)
+
+    return merged_blocks
+
+
+# --- Full pair object ---
+def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
+    """
+    Builds a fully structured pair object with:
+    - block_id
+    - density & confidence
+    - highlight ranges per file
+    - summary statistics
+    """
+
+    merged_blocks = group_and_merge_matches(raw_matches)
+
+    structured_blocks = []
+    highlight_map = {
+        s1: {},
+        s2: {}
+    }
+
+    total_lines_a = 0
+    total_lines_b = 0
+    high_conf_blocks = 0
+    density_sum = 0
+
+    for idx, block in enumerate(merged_blocks, start=1):
+        block_length = block["end_a"] - block["start_a"] + 1
+        density = block["hash_count"] / block_length if block_length > 0 else 0
+
+        confidence = "LOW"
+        if density >= 0.75:
+            confidence = "HIGH"
+            high_conf_blocks += 1
+        elif density >= 0.6:
+            confidence = "MEDIUM"
+
+        density_sum += density
+        total_lines_a += block_length
+        total_lines_b += (block["end_b"] - block["start_b"] + 1)
+
+        structured_block = {
+            "block_id": idx,
+            "file_a": block["file_a"],
+            "file_b": block["file_b"],
+            "start_a": block["start_a"],
+            "end_a": block["end_a"],
+            "start_b": block["start_b"],
+            "end_b": block["end_b"],
+            "block_length": block_length,
+            "density": round(density, 3),
+            "confidence": confidence
+        }
+
+        structured_blocks.append(structured_block)
+
+        # Build highlight map
+        highlight_map[s1].setdefault(block["file_a"], []).append({
+            "block_id": idx,
+            "start": block["start_a"],
+            "end": block["end_a"]
+        })
+
+        highlight_map[s2].setdefault(block["file_b"], []).append({
+            "block_id": idx,
+            "start": block["start_b"],
+            "end": block["end_b"]
+        })
+
+    avg_density = (density_sum / len(structured_blocks)) if structured_blocks else 0
+
+    severity_score = (
+            (score * 0.5) +
+            (avg_density * 0.3) +
+            ((high_conf_blocks / len(structured_blocks)) * 0.2 if structured_blocks else 0)
+    )
+
+    # Embed sources
+    sources = {
+        s1: {},
+        s2: {}
+    }
+
+    for student in highlight_map:
+        for file_name in highlight_map[student]:
+            sources[student][file_name] = fetch_source_code(
+                submissions_folder,
+                student,
+                file_name
+            )
+
+    return {
+        "pair_id": f"{s1}_{s2}",
+        "student_1": s1,
+        "student_2": s2,
+        "similarity": round(score, 4),
+        "severity_score": round(severity_score, 4),
+
+        "summary": {
+            "total_blocks": len(structured_blocks),
+            "high_confidence_blocks": high_conf_blocks,
+            "total_suspicious_lines_a": total_lines_a,
+            "total_suspicious_lines_b": total_lines_b,
+            "average_density": round(avg_density, 3)
+        },
+
+        "blocks": structured_blocks,
+        "files": highlight_map,
+        "sources": sources
+    }
+
+
 def fetch_source_code(submissions_folder, student_id, internal_path):
     # Reads the full source code from the zip file for the report
     zip_path = os.path.join(submissions_folder, f"{student_id}.zip")
@@ -231,60 +414,125 @@ def fetch_source_code(submissions_folder, student_id, internal_path):
     return "// File not found"
 
 
-def run_engine(submissions_folder):
+# --_Boilerplate Handling ---
+def load_boilerplate_hashes(template_dir):
+    """
+    Processes the professor's template code and returns a SET of hashes
+    that should be ignored.
+    """
+    if not os.path.exists(template_dir) or not os.listdir(template_dir):
+        print("No template files found. Skipping boilerplate detection.")
+        return set()
+
+    print(f"Loading Boilerplate from: {template_dir}")
+    # Normalize the template just like a student submission
+    tokens = normalize_package(template_dir, "TEMPLATE")
+    grams = kgrams(tokens)
+    hashes = hash_kgrams(grams)
+    fps = winnow(hashes)
+
+    # Return just the hash values as a set for fast lookup
+    ignored_hashes = {fp["hash"] for fp in fps}
+    print(f"Loaded {len(ignored_hashes)} boilerplate fingerprints.")
+    return ignored_hashes
+
+
+def run_engine(submissions_folder, template_folder):
     # Main execution function
     temp_dir = tempfile.mkdtemp()
     print(f"Processing submissions in {submissions_folder}")
 
+    # 1. Load Boilerplate (Professor's Code)
+    ignored_hashes = load_boilerplate_hashes(template_folder)
+
     fingerprint_db = {}
     zip_files = [f for f in os.listdir(submissions_folder) if f.endswith(".zip")]
+    print("Zip files found:", zip_files)
 
     # Step 1 Generate fingerprints for all students
     for zf in zip_files:
         full_path = os.path.join(submissions_folder, zf)
         s_id, fps = process_zip_submission(full_path, temp_dir)
-        if fps: fingerprint_db[s_id] = fps
 
-    results = []
+        if fps:
+            # --- FILTERING STEP ---
+            # Remove any fingerprint that matches the professor's code
+            filtered_fps = [fp for fp in fps if fp["hash"] not in ignored_hashes]
+            fingerprint_db[s_id] = filtered_fps
+
+            removed_count = len(fps) - len(filtered_fps)
+            print(f"{s_id} -> fingerprints generated: {len(filtered_fps)} (Removed {removed_count} boilerplate)")
+        else:
+            print(f"{s_id} -> fingerprints generated: 0")
+            fingerprint_db[s_id] = []
+
+    flagged_pairs = []
+    forensic_results = []
+
     student_ids = list(fingerprint_db.keys())
+    total_students = len(student_ids)
+    total_pairs_possible = (total_students * (total_students - 1)) // 2
+
+    print("Students ready for comparison:", student_ids)
 
     # Step 2 Compare every student against every other student
     for s1, s2 in itertools.combinations(student_ids, 2):
         score, matches = compare_fingerprints(fingerprint_db[s1], fingerprint_db[s2])
+        print(f"Comparing {s1} vs {s2} -> score:", score)
 
-        if score > REPORT_LIMIT:
+        if score >= SIMILARITY_THRESHOLD:
             print(f"Match found {s1} vs {s2} with score {score:.2f}")
 
-            # Step 3 Extract full source code for the UI
-            code_lookup = {}
+            # Clean frontend structure
+            clean_pair = build_pair_object(s1, s2, score, matches, submissions_folder)
 
-            files_needed_a = set(m['file_a'] for m in matches)
-            files_needed_b = set(m['file_b'] for m in matches)
+            flagged_pairs.append(clean_pair)
 
-            for f in files_needed_a:
-                code_lookup[f"{s1}::{f}"] = fetch_source_code(submissions_folder, s1, f)
-
-            for f in files_needed_b:
-                code_lookup[f"{s2}::{f}"] = fetch_source_code(submissions_folder, s2, f)
-
-            results.append({
+            # Full forensic data (raw matches preserved)
+            forensic_results.append({
                 "student_1": s1,
                 "student_2": s2,
                 "similarity": round(score, 4),
-                "match_count": len(matches),
-                "matches": matches,
-                "files": code_lookup
+                "raw_match_count": len(matches),
+                "raw_matches": matches
             })
+
+    # Also generate forensic report separately
+    forensic_path = os.path.join(os.path.dirname(__file__), "forensic_report.json")
+    with open(forensic_path, "w") as f:
+        json.dump(forensic_results, f, indent=2)
+
+    # Sort flagged pairs by severity score (highest suspicion first)
+    flagged_pairs.sort(key=lambda x: x["severity_score"], reverse=True)
+
+    final_output = {
+        "metadata": {
+            "total_students": total_students,
+            "total_pairs_possible": total_pairs_possible,
+            "pairs_flagged": len(flagged_pairs),
+            "similarity_threshold": SIMILARITY_THRESHOLD
+        },
+        "pairs": flagged_pairs
+    }
 
     shutil.rmtree(temp_dir)
     print("Processing complete")
-    return json.dumps(results, indent=2)
+
+    return json.dumps(final_output, indent=2)
 
 
 if __name__ == "__main__":
-    SUBMISSION_DIR = os.path.join(os.path.dirname(__file__), "submissions")
+    BASE_DIR = os.path.dirname(__file__)
+    SUBMISSION_DIR = os.path.join(BASE_DIR, "submissions")
+    TEMPLATE_DIR = os.path.join(BASE_DIR, "template")  # Put professor's code here (not zipped)
+
+    # Auto-create the template folder if it doesn't exist so you can drop files into it later
+    os.makedirs(TEMPLATE_DIR, exist_ok=True)
+
     if os.path.exists(SUBMISSION_DIR) and os.listdir(SUBMISSION_DIR):
-        json_output = run_engine(SUBMISSION_DIR)
+        # Pass both folders to the engine
+        json_output = run_engine(SUBMISSION_DIR, TEMPLATE_DIR)
+
         with open("class_report.json", "w") as f:
             f.write(json_output)
         print("Saved to class_report.json")
