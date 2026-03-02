@@ -28,6 +28,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
 
+          # Clear Python bytecode cache
+          find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
           # Install/update backend dependencies
           cd backend
           source venv/bin/activate
