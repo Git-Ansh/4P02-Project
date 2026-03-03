@@ -136,6 +136,17 @@ async def submit_assignment(
             detail="Assignment no longer exists",
         )
 
+    # Enforce live due_date from DB (dynamic — survives deadline extensions)
+    due_date = assignment.get("due_date")
+    if due_date:
+        if due_date.tzinfo is None:
+            due_date = due_date.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > due_date:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="The deadline for this assignment has passed.",
+            )
+
     # Read language from assignment (set by instructor)
     language = assignment.get("language", "")
 
@@ -208,6 +219,12 @@ async def submit_assignment(
     assignment_title = assignment["title"]
     submitted_at_str = now.strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    # Fetch university logo and theme for email branding
+    main_db = get_main_db()
+    uni = await main_db.universities.find_one({"slug": slug})
+    logo_url = uni.get("logo_url") if uni else None
+    primary_color = uni.get("primary_color") if uni else None
+
     threading.Thread(
         target=send_submission_receipt,
         kwargs={
@@ -220,6 +237,8 @@ async def submit_assignment(
             "submitted_at": submitted_at_str,
             "file_count": len(file_infos),
             "language": language,
+            "logo_url": logo_url,
+            "primary_color": primary_color,
         },
         daemon=True,
     ).start()
