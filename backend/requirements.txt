@@ -22,7 +22,8 @@ pygments>=2.17.0
 pycparser>=2.21
 javalang>=0.13.0
 
-# Email (Brevo uses requests — already a transitive dep, no extra package needed)
+# Email (Brevo API)
+requests>=2.31.0
 
 # Utilities
 python-dotenv>=1.0.0
