@@ -6,20 +6,20 @@
     "pairs_flagged": 8,
     "similarity_threshold": 0.15,
     "adaptive_k_used": {
-      "09": {
-        "09/Level6.java": 5
-      },
       "sub2.java": {
         "sub2.java": 5
+      },
+      "09": {
+        "09/Level6.java": 5
       },
       "08": {
         "08/Kasus1L6.java": 5
       },
-      "10": {
-        "01/L6.java": 5
-      },
       "05": {
         "05/HelloWorld.java": 5
+      },
+      "10": {
+        "01/L6.java": 5
       },
       "04": {
         "04/T1.java": 5
@@ -39,23 +39,20 @@
       "17": {
         "07/PrintJava.java": 5
       },
-      "T1.java": {
-        "T1.java": 5
-      },
       "03": {
         "03/Main.java": 5
+      },
+      "T1.java": {
+        "T1.java": 5
       },
       "02": {
         "02/Main.java": 5
       },
-      "14": {
-        "04/WelcomeToJava.java": 5
-      },
       "16": {
         "06/hellow.java": 5
       },
-      "sub1.java": {
-        "sub1.java": 5
+      "14": {
+        "04/WelcomeToJava.java": 5
       },
       "15": {
         "05/HelloWorld.java": 5
@@ -63,14 +60,17 @@
       "01": {
         "01/L1.java": 5
       },
+      "sub1.java": {
+        "sub1.java": 5
+      },
       "studentA": {
         "studentA.java": 9
       },
-      "studentC": {
-        "studentC.java": 7
-      },
       "studentB": {
         "studentB.java": 9
+      },
+      "studentC": {
+        "studentC.java": 7
       }
     },
     "boilerplate_hashes_filtered": 4
@@ -379,29 +379,6 @@
       }
     },
     {
-      "pair_id": "10_13",
-      "student_1": "10",
-      "student_2": "13",
-      "similarity": 0.3041,
-      "severity_score": 0.1521,
-      "summary": {
-        "total_blocks": 0,
-        "high_confidence_blocks": 0,
-        "total_suspicious_lines_a": 0,
-        "total_suspicious_lines_b": 0,
-        "average_density": 0
-      },
-      "blocks": [],
-      "files": {
-        "10": {},
-        "13": {}
-      },
-      "sources": {
-        "10": {},
-        "13": {}
-      }
-    },
-    {
       "pair_id": "10_17",
       "student_1": "10",
       "student_2": "17",
@@ -422,6 +399,29 @@
       "sources": {
         "10": {},
         "17": {}
+      }
+    },
+    {
+      "pair_id": "10_13",
+      "student_1": "10",
+      "student_2": "13",
+      "similarity": 0.3041,
+      "severity_score": 0.1521,
+      "summary": {
+        "total_blocks": 0,
+        "high_confidence_blocks": 0,
+        "total_suspicious_lines_a": 0,
+        "total_suspicious_lines_b": 0,
+        "average_density": 0
+      },
+      "blocks": [],
+      "files": {
+        "10": {},
+        "13": {}
+      },
+      "sources": {
+        "10": {},
+        "13": {}
       }
     },
     {
