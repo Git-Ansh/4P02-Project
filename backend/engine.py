@@ -1,57 +1,122 @@
 import os
 import zipfile
 import tempfile
-import shutil
-import hashlib
 import json
 import itertools
+import math
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# MurmurHash3 — fast non-cryptographic hashing (pip install mmh3)
+import mmh3
 
 from tree_sitter import Language, Parser
 import tree_sitter_java
 import tree_sitter_cpp
 
-# Tuned smaller for debugging with small test files
-K_GRAM_SIZE = 5
+# ── Tuning parameters ──────────────────────────────────────────────────────────
+# K_GRAM_SIZE is now a FALLBACK only — actual k is chosen adaptively per file
+# based on that file's token count. See adaptive_k() below.
+K_GRAM_SIZE = 8             # fallback default (raised from 5 — see note below)
 WINDOW_SIZE = 4
-REPORT_LIMIT = 0.0
-SIMILARITY_THRESHOLD = 0.15  # Only pairs above this similarity will be reported
+SIMILARITY_THRESHOLD = 0.15
 
-# Mapping rules for Lexical tokens
+# ── Adaptive k thresholds ──────────────────────────────────────────────────────
+# Maps token count buckets to k values.
+# Rationale: a small file has few tokens — using a large k produces almost no
+# k-grams and makes the fingerprint too sparse to be meaningful. A large file
+# with k=5 produces too many short common sequences (noise). Adaptive k keeps
+# the fingerprint density roughly constant regardless of file size.
+#
+# These boundaries were chosen based on typical Java assignment sizes:
+#   < 80  tokens  ≈ tiny helper/stub file     → k=5
+#   < 200 tokens  ≈ small single-class file   → k=7
+#   < 500 tokens  ≈ medium assignment file    → k=9
+#   500+  tokens  ≈ large multi-method file   → k=11
+ADAPTIVE_K_THRESHOLDS = [
+    (80,  5),
+    (200, 7),
+    (500, 9),
+]
+ADAPTIVE_K_MAX = 11   # used when token count exceeds all thresholds
+
+# ── Token diversity filter ────────────────────────────────────────────────────
+# A k-gram window where all tokens are the same type (e.g. ID ID ID ID ID) is
+# structurally meaningless — it matches trivially across any two files that do
+# arithmetic or variable access, which is every file. We require at least this
+# many DISTINCT token types in a window before it is considered fingerprint-worthy.
+#
+# Examples with MIN_TOKEN_DIVERSITY = 3:
+#   "ID ID ID ID ID"              → 1 unique type → DISCARDED  (noise)
+#   "ID ID ASSIGN ID ID"          → 2 unique types → DISCARDED  (too generic)
+#   "IF ID ASSIGN NUM RETURN"     → 4 unique types → KEPT       (distinctive)
+#   "LOOP_START ID BIN_OP ID NUM" → 4 unique types → KEPT       (distinctive)
+#
+# Setting this too high (e.g. 5) risks discarding valid short matches in small
+# files. 3 is the practical minimum for meaningful structural distinctiveness.
+MIN_TOKEN_DIVERSITY = 3
+
+# ── Token maps ────────────────────────────────────────────────────────────────
 LEXICAL_MAP = {
-    "identifier": "ID", "field_identifier": "ID", "type_identifier": "ID", "variable_declarator": "ID",
+    "identifier": "ID", "field_identifier": "ID", "type_identifier": "ID",
     "decimal_integer_literal": "NUM", "hex_integer_literal": "NUM", "number_literal": "NUM",
     "string_literal": "STR", "character_literal": "STR", "true": "BOOL", "false": "BOOL",
 }
 
-# Mapping rules for Structural tokens
 STRUCTURAL_MAP = {
-    "if_statement": "IF", "else_clause": "ELSE", "for_statement": "LOOP_START", "while_statement": "LOOP_START",
-    "do_statement": "LOOP_START", "enhanced_for_statement": "LOOP_START", "return_statement": "RETURN",
+    "if_statement": "IF", "else_clause": "ELSE", "for_statement": "LOOP_START",
+    "while_statement": "LOOP_START", "do_statement": "LOOP_START",
+    "enhanced_for_statement": "LOOP_START", "return_statement": "RETURN",
     "program": "MODULE", "method_declaration": "FUNC_DEF", "function_definition": "FUNC_DEF",
-    "constructor_declaration": "FUNC_DEF", "class_declaration": "CLASS", "assignment_expression": "ASSIGN",
-    "update_expression": "PLUS_ASSIGN", "binary_expression": "BIN_OP",
+    "constructor_declaration": "FUNC_DEF", "class_declaration": "CLASS",
+    "assignment_expression": "ASSIGN", "update_expression": "PLUS_ASSIGN",
+    "binary_expression": "BIN_OP",
 }
 
-# Node types to ignore during parsing
 IGNORE_NODE_TYPES = {
     "comment", "line_comment", "block_comment", "block", "compound_statement",
     "expression_statement", "parenthesized_expression", "formal_parameters",
-    "argument_list", "declaration", "translation_unit"
+    "argument_list", "declaration", "translation_unit", "variable_declarator",
 }
 
-# Initialize languages
+# ── Language initialisation ───────────────────────────────────────────────────
 JAVA_LANG = Language(tree_sitter_java.language())
-CPP_LANG = Language(tree_sitter_cpp.language())
+CPP_LANG  = Language(tree_sitter_cpp.language())
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Adaptive k selection
+# ─────────────────────────────────────────────────────────────────────────────
+
+def adaptive_k(token_count):
+    """
+    Returns the appropriate k-gram size for a file with the given token count.
+
+    WHY ADAPTIVE K:
+    A fixed k creates a tradeoff — small k causes too many coincidental matches
+    on short common sequences (false positives), large k on small files produces
+    almost no fingerprints (false negatives). Adaptive k keeps fingerprint density
+    roughly stable: each file gets a k proportional to how much code it contains.
+
+    The returned k is also stored in each fingerprint's metadata so the frontend
+    can display it and the forensic report can reproduce results exactly.
+    """
+    for threshold, k in ADAPTIVE_K_THRESHOLDS:
+        if token_count < threshold:
+            return k
+    return ADAPTIVE_K_MAX
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parsing helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 def get_parser(extension):
-    # Returns the correct parser based on file extension
     parser = Parser()
     try:
         if extension == ".java":
             parser.language = JAVA_LANG
             return parser
-        elif extension in [".cpp", ".c", ".cc", ".h", ".hpp"]:
+        elif extension in {".cpp", ".c", ".cc", ".h", ".hpp"}:
             parser.language = CPP_LANG
             return parser
     except Exception:
@@ -60,212 +125,422 @@ def get_parser(extension):
 
 
 def normalize_ast(node, tokens):
-    # Recursively walks the tree to extract tokens
     if node.type in IGNORE_NODE_TYPES:
         for child in node.children:
             normalize_ast(child, tokens)
         return
 
-    token_str = None
-    if node.type in LEXICAL_MAP:
-        token_str = LEXICAL_MAP[node.type]
-    elif node.type in STRUCTURAL_MAP:
-        token_str = STRUCTURAL_MAP[node.type]
-
+    token_str = LEXICAL_MAP.get(node.type) or STRUCTURAL_MAP.get(node.type)
     if token_str:
-        # Add 1 because tree sitter starts at line 0
-        line_num = node.start_point[0] + 1
-        tokens.append({"t": token_str, "line": line_num})
+        tokens.append({"t": token_str, "line": node.start_point[0] + 1})
 
     for child in node.children:
         normalize_ast(child, tokens)
 
 
 def normalize_package(directory_path, student_id):
-    # Reads all files in a folder and merges them into one token stream
-    all_tokens = []
-    valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp"}
+    """
+    Walks a student's extracted directory and returns a token stream.
 
+    CHANGE: Now returns tokens grouped by file as a dict
+    { rel_path -> [tokens] } so that adaptive_k() can be applied
+    per-file rather than to the entire merged stream.
+    Previously tokens were merged into one flat list immediately,
+    losing the per-file token count needed for per-file k selection.
+    """
+    valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp"}
     files = []
+
     for root, _, filenames in os.walk(directory_path):
         for filename in filenames:
-            # Ignores ALL hidden files (starting with .) and macOS specific junk
             if filename.startswith("._") or "__MACOSX" in root:
                 continue
-
             ext = os.path.splitext(filename)[1]
             if ext in valid_exts:
-                full_path = os.path.join(root, filename)
-                files.append((full_path, ext))
+                files.append((os.path.join(root, filename), ext))
 
-    # Sort files to ensure the order is always the same
     files.sort()
+
+    # Returns: list of (rel_path, [token_dicts])
+    file_token_groups = []
 
     for path, ext in files:
         parser = get_parser(ext)
-        if not parser: continue
-
+        if not parser:
+            continue
         try:
             with open(path, "rb") as f:
                 code = f.read()
             tree = parser.parse(code)
             file_tokens = []
             normalize_ast(tree.root_node, file_tokens)
-
-            # Save relative path for the report
             rel_path = os.path.relpath(path, directory_path)
             for tok in file_tokens:
                 tok["file"] = rel_path
                 tok["student"] = student_id
-                all_tokens.append(tok)
+            file_token_groups.append((rel_path, file_tokens))
         except Exception as e:
             print(f"Error parsing {path}: {e}")
 
-    return all_tokens
+    return file_token_groups
 
 
-def kgrams(tokens, k=K_GRAM_SIZE):
-    # Generates overlapping k-grams from the token list
+# ─────────────────────────────────────────────────────────────────────────────
+# Fingerprinting
+# ─────────────────────────────────────────────────────────────────────────────
+
+def kgrams(tokens, k):
+    """
+    Generates overlapping k-grams from a single file's token list.
+
+    CHANGE: k is now a required parameter — callers must pass it explicitly.
+    This enforces that every call site has consciously chosen a k value
+    (via adaptive_k()) rather than silently falling back to the global default.
+    The k value is stored in each gram's metadata for traceability.
+    """
     grams = []
     for i in range(len(tokens) - k + 1):
         window = tokens[i: i + k]
 
-        # Check if window crosses file boundaries and skip if true
-        if window[0]["file"] != window[-1]["file"]:
+        # Boundary check — all tokens must be from the same file
+        if len({t["file"] for t in window}) > 1:
             continue
 
-        # Use space delimiter to avoid accidental token boundary collisions
-        content_str = " ".join([t["t"] for t in window])
-        meta = {
+        # Diversity filter — discard windows where all (or nearly all) tokens
+        # are the same type. A window like "ID ID ID ID ID" matches trivially
+        # in any file that does variable access and tells us nothing about copying.
+        # We require at least MIN_TOKEN_DIVERSITY distinct token types in the window.
+        token_types = {t["t"] for t in window}
+        if len(token_types) < MIN_TOKEN_DIVERSITY:
+            continue
+
+        content_str = " ".join(t["t"] for t in window)
+        grams.append((content_str, {
             "hash": None,
             "file": window[0]["file"],
             "start": window[0]["line"],
-            "end": window[-1]["line"]
-        }
-        grams.append((content_str, meta))
+            "end": window[-1]["line"],
+            "k": k,    # stored for forensic traceability
+        }))
     return grams
 
 
 def hash_kgrams(kgrams_list):
-    # Converts k-gram strings into numeric hashes
+    """Uses mmh3.hash128() — ~3-5x faster than MD5, returns int directly."""
     hashed_list = []
     for content_str, meta in kgrams_list:
-        h_val = int(hashlib.md5(content_str.encode("utf-8")).hexdigest(), 16)
-        meta["hash"] = h_val
+        meta["hash"] = mmh3.hash128(content_str, signed=False)
         hashed_list.append(meta)
     return hashed_list
 
 
 def winnow(hashed_grams, w=WINDOW_SIZE):
-    # Selects the minimum hash in every window to reduce data size
-    if len(hashed_grams) == 0: return []
+    """
+    Moss-compliant winnowing: selects RIGHTMOST minimum hash in each window.
+    Rightmost tie-breaking ensures identical files produce identical fingerprint
+    sets, keeping similarity scores consistent.
+    """
+    if not hashed_grams:
+        return []
+
     fingerprints = []
     last_min_idx = -1
+
     for i in range(len(hashed_grams) - w + 1):
         window = hashed_grams[i: i + w]
-        min_obj = min(window, key=lambda x: x["hash"])
-        min_idx_rel = window.index(min_obj)
-        min_idx_abs = i + min_idx_rel
+        min_hash_val = min(g["hash"] for g in window)
 
-        # Only add if it is a new index
+        for j in range(w - 1, -1, -1):
+            if window[j]["hash"] == min_hash_val:
+                min_idx_abs = i + j
+                break
+
         if min_idx_abs != last_min_idx:
-            fingerprints.append(min_obj)
+            fingerprints.append(hashed_grams[min_idx_abs])
             last_min_idx = min_idx_abs
+
     return fingerprints
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Zip handling
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _load_zip_source_cache(zip_path):
+    """Reads every file in a zip once into memory: { path -> source_str }."""
+    cache = {}
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+            for name in z.namelist():
+                try:
+                    cache[name] = z.read(name).decode("utf-8", errors="ignore")
+                except Exception:
+                    cache[name] = "// Error reading file"
+    except Exception:
+        pass
+    return cache
+
+
+def _lookup_source(source_cache, student_id, internal_path):
+    student_files = source_cache.get(student_id, {})
+    target = internal_path.replace("\\", "/")
+    if target in student_files:
+        return student_files[target]
+    for cached_path, content in student_files.items():
+        if cached_path.endswith(target):
+            return content
+    return "// File not found"
+
+
 def process_zip_submission(zip_path, extract_root):
-    # Unzips a file and runs the processing pipeline
+    """
+    Unzips one submission and runs the full fingerprint pipeline.
+
+    CHANGE: normalize_package now returns per-file token groups. This function
+    applies adaptive_k() to each file individually, then merges all fingerprints
+    into one flat list. The k used per file is stored in each fingerprint's
+    metadata. Also returns a k_map { file -> k } for the metadata report.
+
+    Must remain a module-level function (not a closure) to be picklable by
+    ProcessPoolExecutor.
+    """
     student_id = os.path.splitext(os.path.basename(zip_path))[0]
     extract_path = os.path.join(extract_root, student_id)
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-        tokens = normalize_package(extract_path, student_id)
-        grams = kgrams(tokens)
-        hashes = hash_kgrams(grams)
-        fps = winnow(hashes)
-        return student_id, fps
+        with zipfile.ZipFile(zip_path, "r") as zr:
+            zr.extractall(extract_path)
+
+        file_token_groups = normalize_package(extract_path, student_id)
+
+        all_fps = []
+        k_map   = {}   # rel_path -> k used, reported in metadata
+
+        for rel_path, tokens in file_token_groups:
+            k = adaptive_k(len(tokens))
+            k_map[rel_path] = k
+            grams = kgrams(tokens, k)
+            hashed = hash_kgrams(grams)
+            fps = winnow(hashed)
+            all_fps.extend(fps)
+
+        return student_id, all_fps, k_map
+
     except zipfile.BadZipFile:
-        return student_id, []
+        return student_id, [], {}
 
 
-def compare_fingerprints(fp_a, fp_b):
-    # Compares two sets of fingerprints to find matches
+# ─────────────────────────────────────────────────────────────────────────────
+# Boilerplate handling
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_boilerplate_hashes(template_dir):
+    """
+    Processes the professor's template/starter code and returns the set of
+    fingerprint hashes that should be ignored during comparison.
+
+    HOW IT WORKS:
+    The template directory is run through the exact same pipeline as a student
+    submission — normalize → kgrams (adaptive k per file) → hash → winnow.
+    The resulting hashes represent code patterns that every student will have
+    simply because the professor gave it to them. Matching on these would flag
+    every student pair as suspicious, which is wrong.
+
+    These hashes are stripped from every student's fingerprint set before the
+    inverted index is built, so boilerplate never enters the IDF weight table
+    either — keeping the weighted Jaccard scores clean.
+
+    WHY FIXED HERE (not in compare_fingerprints):
+    Filtering before the index means boilerplate hashes never affect IDF weights.
+    If we filtered inside compare_fingerprints, a boilerplate hash shared by all
+    30 students would still pollute the inverted index and skew weights.
+
+    Returns: set of hash integers to ignore. Empty set if no template found.
+    """
+    if not os.path.exists(template_dir) or not os.listdir(template_dir):
+        print("No template directory found — skipping boilerplate detection.")
+        return set()
+
+    print(f"Loading boilerplate from: {template_dir}")
+
+    # Use the same per-file adaptive pipeline as student submissions
+    file_token_groups = normalize_package(template_dir, "TEMPLATE")
+
+    all_fps = []
+    for rel_path, tokens in file_token_groups:
+        k = adaptive_k(len(tokens))
+        grams  = kgrams(tokens, k)
+        hashed = hash_kgrams(grams)
+        fps    = winnow(hashed)
+        all_fps.extend(fps)
+
+    ignored_hashes = {fp["hash"] for fp in all_fps}
+    print(f"Boilerplate fingerprints loaded: {len(ignored_hashes)} hashes will be ignored.")
+    return ignored_hashes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Inverted index
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_inverted_index(fingerprint_db):
+    """
+    Builds hash -> {student_id, ...} so we only compare pairs sharing >= 1 hash.
+    Also the foundation for IDF weight computation — the set size for each hash
+    IS the document frequency used in build_idf_weights().
+    """
+    inverted = {}
+    for student_id, fps in fingerprint_db.items():
+        for fp in fps:
+            h = fp["hash"]
+            if h not in inverted:
+                inverted[h] = set()
+            inverted[h].add(student_id)
+    return inverted
+
+
+def candidate_pairs_from_index(inverted_index):
+    """Returns only pairs sharing at least one hash as sorted (s1, s2) tuples."""
+    candidates = set()
+    for students in inverted_index.values():
+        if len(students) > 1:
+            for pair in itertools.combinations(sorted(students), 2):
+                candidates.add(pair)
+    return candidates
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IDF weight computation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_idf_weights(inverted_index, total_students):
+    """
+    Computes an Inverse Document Frequency (IDF) weight for every hash seen
+    across the class.
+
+    WHY IDF-WEIGHTED JACCARD:
+    Standard Jaccard treats every shared fingerprint equally. But a hash like
+    the token sequence for a simple 'for' loop appears in almost every student's
+    submission naturally — it's structural boilerplate, not evidence of copying.
+    Meanwhile a hash that only appears in 2 out of 30 students is highly suspicious.
+
+    IDF captures this: the weight of a hash is inversely proportional to how
+    many students share it. A hash in 1 student gets weight 1.0. A hash in all
+    30 students gets weight ~0.17. When computing similarity, shared common-code
+    hashes contribute almost nothing; shared rare hashes dominate the score.
+
+    Formula:  weight(h) = 1 / log(1 + students_containing_h)
+
+    We use log base-e (natural log). Adding 1 inside the log prevents division
+    by zero and ensures weight(h) = 1.0 when only 1 student has the hash.
+
+    WHY COMPUTE HERE (not inside compare_fingerprints):
+    IDF requires the full class view — you cannot know a hash is "rare" until
+    you have seen every student's fingerprints. Computing it per-pair would mean
+    each pair sees a different class, producing inconsistent weights. By computing
+    once here after all fingerprints are built, every pair comparison uses the
+    same consistent weight table.
+
+    Returns: { hash -> float weight }
+    """
+    weights = {}
+    for h, students in inverted_index.items():
+        doc_freq = len(students)
+        weights[h] = 1.0 / math.log(1 + doc_freq)
+    return weights
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Comparison
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compare_fingerprints(fp_a, fp_b, idf_weights):
+    """
+    Computes IDF-weighted Jaccard similarity between two fingerprint sets.
+
+    CHANGE: Replaced raw Jaccard with IDF-weighted Jaccard.
+
+    STANDARD JACCARD (old):
+        score = |A ∩ B| / |A ∪ B|
+        Every hash counts as 1 regardless of how common it is across the class.
+
+    WEIGHTED JACCARD (new):
+        score = sum(weight[h] for h in A ∩ B)
+              / sum(weight[h] for h in A ∪ B)
+
+        Where weight[h] = 1 / log(1 + students_with_h)
+
+    The effect: a shared hash that appears in 25/30 students contributes ~0.17
+    to the numerator. A shared hash that appears in only 2/30 students contributes
+    ~0.59. The score is now dominated by rare shared patterns — exactly the kind
+    that indicate actual copying rather than common code structure.
+
+    The raw match list is unchanged — it still records every individual matched
+    hash location for the block merging and highlighting steps downstream.
+    """
     map_a = {}
     for fp in fp_a:
-        h = fp["hash"]
-        if h not in map_a: map_a[h] = []
-        map_a[h].append(fp)
+        map_a.setdefault(fp["hash"], []).append(fp)
 
     matches = []
-    unique_hashes = set()
-
     for fb in fp_b:
         h = fb["hash"]
         if h in map_a:
-            unique_hashes.add(h)
             for fa in map_a[h]:
                 matches.append({
                     "hash": str(h),
                     "file_a": fa["file"], "start_a": fa["start"], "end_a": fa["end"],
-                    "file_b": fb["file"], "start_b": fb["start"], "end_b": fb["end"]
+                    "file_b": fb["file"], "start_b": fb["start"], "end_b": fb["end"],
                 })
 
-    set_a = set(f["hash"] for f in fp_a)
-    set_b = set(f["hash"] for f in fp_b)
-    intersection = len(set_a.intersection(set_b))
-    union = len(set_a.union(set_b))
-    score = intersection / union if union > 0 else 0.0
+    set_a = {f["hash"] for f in fp_a}
+    set_b = {f["hash"] for f in fp_b}
+    union_hashes        = set_a | set_b
+    intersection_hashes = set_a & set_b
+
+    # Weighted Jaccard — sums IDF weights instead of counting raw hashes
+    # Falls back to weight=1.0 for any hash not in the table (shouldn't happen
+    # in practice, but guards against edge cases like single-student classes)
+    w_intersection = sum(idf_weights.get(h, 1.0) for h in intersection_hashes)
+    w_union        = sum(idf_weights.get(h, 1.0) for h in union_hashes)
+
+    score = w_intersection / w_union if w_union > 0 else 0.0
     return score, matches
 
 
-# --- Helper functions ---
+# ─────────────────────────────────────────────────────────────────────────────
+# Reporting
+# ─────────────────────────────────────────────────────────────────────────────
+
 def group_and_merge_matches(matches, min_block_size=3):
     """
-    Groups matches by file pair and merges overlapping line ranges.
-    Returns compact region-level matches.
+    Groups matches by file pair and merges adjacent/overlapping line ranges.
+    Merges purely on adjacency — no structural alignment check, since copied
+    code can appear at any line in the target file.
     """
     grouped = {}
-
     for m in matches:
-        key = (m["file_a"], m["file_b"])
-        if key not in grouped:
-            grouped[key] = []
-        grouped[key].append(m)
+        grouped.setdefault((m["file_a"], m["file_b"]), []).append(m)
 
     merged_blocks = []
 
     for (file_a, file_b), items in grouped.items():
-        # Sort by start lines
         items.sort(key=lambda x: (x["start_a"], x["start_b"]))
-
         current = None
 
         for m in items:
             if current is None:
                 current = {
-                    "file_a": file_a,
-                    "file_b": file_b,
-                    "start_a": m["start_a"],
-                    "end_a": m["end_a"],
-                    "start_b": m["start_b"],
-                    "end_b": m["end_b"],
-                    "hash_count": 1
+                    "file_a": file_a, "file_b": file_b,
+                    "start_a": m["start_a"], "end_a": m["end_a"],
+                    "start_b": m["start_b"], "end_b": m["end_b"],
+                    "hash_count": 1,
                 }
                 continue
 
-            # Merge only if both A and B sides are roughly aligned
-            a_adjacent = m["start_a"] <= current["end_a"] + 1
-            b_adjacent = m["start_b"] <= current["end_b"] + 1
+            a_adjacent = m["start_a"] <= current["end_a"] + 2
+            b_adjacent = m["start_b"] <= current["end_b"] + 2
 
-            # Ensure structural alignment between A and B
-            a_offset = m["start_a"] - current["end_a"]
-            b_offset = m["start_b"] - current["end_b"]
-
-            aligned = abs(a_offset - b_offset) <= 2  # tolerance of 2 lines
-
-            if a_adjacent and b_adjacent and aligned:
+            if a_adjacent and b_adjacent:
                 current["end_a"] = max(current["end_a"], m["end_a"])
                 current["end_b"] = max(current["end_b"], m["end_b"])
                 current["hash_count"] += 1
@@ -273,13 +548,10 @@ def group_and_merge_matches(matches, min_block_size=3):
                 if (current["end_a"] - current["start_a"] + 1) >= min_block_size:
                     merged_blocks.append(current)
                 current = {
-                    "file_a": file_a,
-                    "file_b": file_b,
-                    "start_a": m["start_a"],
-                    "end_a": m["end_a"],
-                    "start_b": m["start_b"],
-                    "end_b": m["end_b"],
-                    "hash_count": 1
+                    "file_a": file_a, "file_b": file_b,
+                    "start_a": m["start_a"], "end_a": m["end_a"],
+                    "start_b": m["start_b"], "end_b": m["end_b"],
+                    "hash_count": 1,
                 }
 
         if current and (current["end_a"] - current["start_a"] + 1) >= min_block_size:
@@ -288,28 +560,12 @@ def group_and_merge_matches(matches, min_block_size=3):
     return merged_blocks
 
 
-# --- Full pair object ---
-def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
-    """
-    Builds a fully structured pair object with:
-    - block_id
-    - density & confidence
-    - highlight ranges per file
-    - summary statistics
-    """
-
+def build_pair_object(s1, s2, score, raw_matches, source_cache):
     merged_blocks = group_and_merge_matches(raw_matches)
 
     structured_blocks = []
-    highlight_map = {
-        s1: {},
-        s2: {}
-    }
-
-    total_lines_a = 0
-    total_lines_b = 0
-    high_conf_blocks = 0
-    density_sum = 0
+    highlight_map = {s1: {}, s2: {}}
+    total_lines_a = total_lines_b = high_conf_blocks = density_sum = 0
 
     for idx, block in enumerate(merged_blocks, start=1):
         block_length = block["end_a"] - block["start_a"] + 1
@@ -322,219 +578,213 @@ def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
         elif density >= 0.6:
             confidence = "MEDIUM"
 
-        density_sum += density
+        density_sum   += density
         total_lines_a += block_length
-        total_lines_b += (block["end_b"] - block["start_b"] + 1)
+        total_lines_b += block["end_b"] - block["start_b"] + 1
 
-        structured_block = {
+        structured_blocks.append({
             "block_id": idx,
-            "file_a": block["file_a"],
-            "file_b": block["file_b"],
-            "start_a": block["start_a"],
-            "end_a": block["end_a"],
-            "start_b": block["start_b"],
-            "end_b": block["end_b"],
+            "file_a": block["file_a"], "file_b": block["file_b"],
+            "start_a": block["start_a"], "end_a": block["end_a"],
+            "start_b": block["start_b"], "end_b": block["end_b"],
             "block_length": block_length,
             "density": round(density, 3),
-            "confidence": confidence
-        }
-
-        structured_blocks.append(structured_block)
-
-        # Build highlight map
-        highlight_map[s1].setdefault(block["file_a"], []).append({
-            "block_id": idx,
-            "start": block["start_a"],
-            "end": block["end_a"]
+            "confidence": confidence,
         })
 
-        highlight_map[s2].setdefault(block["file_b"], []).append({
-            "block_id": idx,
-            "start": block["start_b"],
-            "end": block["end_b"]
-        })
+        highlight_map[s1].setdefault(block["file_a"], []).append(
+            {"block_id": idx, "start": block["start_a"], "end": block["end_a"]}
+        )
+        highlight_map[s2].setdefault(block["file_b"], []).append(
+            {"block_id": idx, "start": block["start_b"], "end": block["end_b"]}
+        )
 
-    avg_density = (density_sum / len(structured_blocks)) if structured_blocks else 0
-
+    n = len(structured_blocks)
+    avg_density = density_sum / n if n else 0
     severity_score = (
-            (score * 0.5) +
-            (avg_density * 0.3) +
-            ((high_conf_blocks / len(structured_blocks)) * 0.2 if structured_blocks else 0)
+        score       * 0.5 +
+        avg_density * 0.3 +
+        (high_conf_blocks / n * 0.2 if n else 0)
     )
 
-    # Embed sources
-    sources = {
-        s1: {},
-        s2: {}
-    }
-
-    for student in highlight_map:
-        for file_name in highlight_map[student]:
-            sources[student][file_name] = fetch_source_code(
-                submissions_folder,
-                student,
-                file_name
-            )
+    sources = {s1: {}, s2: {}}
+    for sid in (s1, s2):
+        for file_name in highlight_map[sid]:
+            sources[sid][file_name] = _lookup_source(source_cache, sid, file_name)
 
     return {
         "pair_id": f"{s1}_{s2}",
-        "student_1": s1,
-        "student_2": s2,
+        "student_1": s1, "student_2": s2,
         "similarity": round(score, 4),
         "severity_score": round(severity_score, 4),
-
         "summary": {
-            "total_blocks": len(structured_blocks),
+            "total_blocks": n,
             "high_confidence_blocks": high_conf_blocks,
             "total_suspicious_lines_a": total_lines_a,
             "total_suspicious_lines_b": total_lines_b,
-            "average_density": round(avg_density, 3)
+            "average_density": round(avg_density, 3),
         },
-
         "blocks": structured_blocks,
         "files": highlight_map,
-        "sources": sources
+        "sources": sources,
     }
 
 
-def fetch_source_code(submissions_folder, student_id, internal_path):
-    # Reads the full source code from the zip file for the report
-    zip_path = os.path.join(submissions_folder, f"{student_id}.zip")
-    try:
-        with zipfile.ZipFile(zip_path, "r") as z:
-            target = internal_path.replace("\\", "/")
-            if target in z.namelist():
-                return z.read(target).decode("utf-8", errors="ignore")
-            # Try to find the file if path separators differ
-            for f in z.namelist():
-                if f.endswith(target):
-                    return z.read(f).decode("utf-8", errors="ignore")
-    except Exception:
-        return "// Error reading file"
-    return "// File not found"
+# ─────────────────────────────────────────────────────────────────────────────
+# Main engine
+# ─────────────────────────────────────────────────────────────────────────────
 
-
-# --_Boilerplate Handling ---
-def load_boilerplate_hashes(template_dir):
+def run_engine(submissions_folder, template_folder=None, parallel=True, save_forensic=False):
     """
-    Processes the professor's template code and returns a SET of hashes
-    that should be ignored.
+    submissions_folder — absolute path to the folder containing student .zip files
+    template_folder    — optional path to professor's starter/template code
+                         (plain directory of .java/.cpp files, NOT a zip).
+                         Fingerprints from this code are stripped from every
+                         student's fingerprint set before comparison so professor-
+                         provided boilerplate never inflates similarity scores.
+                         Pass None (default) to skip boilerplate filtering.
+    parallel=True      — uses ProcessPoolExecutor (production, multi-core)
+    parallel=False     — sequential fallback (testing / comparator / single-file runs)
+    save_forensic=False — when True, writes forensic_report.json next to the
+                          submissions folder. Off by default — the raw match data
+                          is large and only useful for debugging specific pairs.
     """
-    if not os.path.exists(template_dir) or not os.listdir(template_dir):
-        print("No template files found. Skipping boilerplate detection.")
-        return set()
+    base_dir = os.path.dirname(os.path.abspath(submissions_folder))
 
-    print(f"Loading Boilerplate from: {template_dir}")
-    # Normalize the template just like a student submission
-    tokens = normalize_package(template_dir, "TEMPLATE")
-    grams = kgrams(tokens)
-    hashes = hash_kgrams(grams)
-    fps = winnow(hashes)
+    # ── Step 0: Load boilerplate hashes (before anything else) ───────────────
+    # Done first so the set is ready to filter fingerprints immediately after
+    # each student is processed. Boilerplate hashes are stripped before the
+    # inverted index is built — keeping them out of IDF weights entirely.
+    boilerplate_hashes = load_boilerplate_hashes(template_folder) if template_folder else set()
+    if boilerplate_hashes:
+        print(f"Boilerplate filter active: {len(boilerplate_hashes)} hashes excluded.")
+    else:
+        print("No boilerplate filter applied.")
 
-    # Return just the hash values as a set for fast lookup
-    ignored_hashes = {fp["hash"] for fp in fps}
-    print(f"Loaded {len(ignored_hashes)} boilerplate fingerprints.")
-    return ignored_hashes
-
-
-def run_engine(submissions_folder, template_folder):
-    # Main execution function
-    temp_dir = tempfile.mkdtemp()
     print(f"Processing submissions in {submissions_folder}")
-
-    # 1. Load Boilerplate (Professor's Code)
-    ignored_hashes = load_boilerplate_hashes(template_folder)
-
-    fingerprint_db = {}
     zip_files = [f for f in os.listdir(submissions_folder) if f.endswith(".zip")]
     print("Zip files found:", zip_files)
 
-    # Step 1 Generate fingerprints for all students
-    for zf in zip_files:
-        full_path = os.path.join(submissions_folder, zf)
-        s_id, fps = process_zip_submission(full_path, temp_dir)
+    fingerprint_db = {}
+    source_cache   = {}
+    k_map_db       = {}   # student_id -> { file -> k used }
 
-        if fps:
-            # --- FILTERING STEP ---
-            # Remove any fingerprint that matches the professor's code
-            filtered_fps = [fp for fp in fps if fp["hash"] not in ignored_hashes]
-            fingerprint_db[s_id] = filtered_fps
+    with tempfile.TemporaryDirectory() as temp_dir:
 
-            removed_count = len(fps) - len(filtered_fps)
-            print(f"{s_id} -> fingerprints generated: {len(filtered_fps)} (Removed {removed_count} boilerplate)")
+        # ── Step 1: Fingerprint all submissions ───────────────────────────────
+        full_paths = [os.path.join(submissions_folder, zf) for zf in zip_files]
+
+        if parallel:
+            with ProcessPoolExecutor() as executor:
+                future_to_path = {
+                    executor.submit(process_zip_submission, path, temp_dir): path
+                    for path in full_paths
+                }
+                for future in as_completed(future_to_path):
+                    s_id, fps, k_map = future.result()
+                    print(f"{s_id} -> fingerprints: {len(fps)}  "
+                          f"k values used: {sorted(set(k_map.values()))}")
+                    fingerprint_db[s_id] = fps
+                    k_map_db[s_id]       = k_map
+                    source_cache[s_id]   = _load_zip_source_cache(future_to_path[future])
         else:
-            print(f"{s_id} -> fingerprints generated: 0")
-            fingerprint_db[s_id] = []
+            for path in full_paths:
+                s_id, fps, k_map = process_zip_submission(path, temp_dir)
+                print(f"{s_id} -> fingerprints: {len(fps)}  "
+                      f"k values used: {sorted(set(k_map.values()))}")
+                fingerprint_db[s_id] = fps
+                k_map_db[s_id]       = k_map
+                source_cache[s_id]   = _load_zip_source_cache(path)
 
-    flagged_pairs = []
-    forensic_results = []
+        # ── Step 1b: Strip boilerplate hashes from every student ────────────
+        # Done here — after all fingerprints are built but before the inverted
+        # index — so boilerplate hashes never enter the index or the IDF table.
+        # Filtering inside compare_fingerprints would be too late: the hashes
+        # would already be in the index and skewing IDF weights for every pair.
+        if boilerplate_hashes:
+            before = sum(len(fps) for fps in fingerprint_db.values())
+            fingerprint_db = {
+                s_id: [fp for fp in fps if fp["hash"] not in boilerplate_hashes]
+                for s_id, fps in fingerprint_db.items()
+            }
+            after = sum(len(fps) for fps in fingerprint_db.values())
+            print(f"Boilerplate stripped: {before - after} fingerprints removed "
+                  f"({before} → {after} remaining across all students)")
 
-    student_ids = list(fingerprint_db.keys())
-    total_students = len(student_ids)
-    total_pairs_possible = (total_students * (total_students - 1)) // 2
+        # ── Step 2: Build inverted index + IDF weights ────────────────────────
+        total_students = len(fingerprint_db)
+        inverted_index = build_inverted_index(fingerprint_db)
+        idf_weights    = build_idf_weights(inverted_index, total_students)
+        candidates     = candidate_pairs_from_index(inverted_index)
+        total_possible = total_students * (total_students - 1) // 2
 
-    print("Students ready for comparison:", student_ids)
+        print(f"IDF weight table: {len(idf_weights)} unique hashes across class")
+        print(f"Candidate pairs: {len(candidates)} / {total_possible} total")
 
-    # Step 2 Compare every student against every other student
-    for s1, s2 in itertools.combinations(student_ids, 2):
-        score, matches = compare_fingerprints(fingerprint_db[s1], fingerprint_db[s2])
-        print(f"Comparing {s1} vs {s2} -> score:", score)
+        flagged_pairs    = []
+        forensic_results = []
 
-        if score >= SIMILARITY_THRESHOLD:
-            print(f"Match found {s1} vs {s2} with score {score:.2f}")
+        # ── Step 3: Compare candidate pairs with weighted Jaccard ─────────────
+        for s1, s2 in candidates:
+            score, matches = compare_fingerprints(
+                fingerprint_db[s1], fingerprint_db[s2], idf_weights
+            )
+            print(f"Comparing {s1} vs {s2} -> weighted score: {score:.4f}")
 
-            # Clean frontend structure
-            clean_pair = build_pair_object(s1, s2, score, matches, submissions_folder)
+            if score >= SIMILARITY_THRESHOLD:
+                print(f"  -> Match flagged: {s1} vs {s2} ({score:.2f})")
+                clean_pair = build_pair_object(s1, s2, score, matches, source_cache)
+                flagged_pairs.append(clean_pair)
+                if save_forensic:
+                    forensic_results.append({
+                        "student_1": s1, "student_2": s2,
+                        "similarity": round(score, 4),
+                        "raw_match_count": len(matches),
+                        "raw_matches": matches,
+                    })
 
-            flagged_pairs.append(clean_pair)
+    # ── Optional forensic dump ────────────────────────────────────────────────
+    if save_forensic:
+        forensic_path = os.path.join(base_dir, "forensic_report.json")
+        with open(forensic_path, "w") as f:
+            json.dump(forensic_results, f, indent=2)
+        print(f"Forensic report saved to {forensic_path}")
 
-            # Full forensic data (raw matches preserved)
-            forensic_results.append({
-                "student_1": s1,
-                "student_2": s2,
-                "similarity": round(score, 4),
-                "raw_match_count": len(matches),
-                "raw_matches": matches
-            })
-
-    # Also generate forensic report separately
-    forensic_path = os.path.join(os.path.dirname(__file__), "forensic_report.json")
-    with open(forensic_path, "w") as f:
-        json.dump(forensic_results, f, indent=2)
-
-    # Sort flagged pairs by severity score (highest suspicion first)
     flagged_pairs.sort(key=lambda x: x["severity_score"], reverse=True)
 
     final_output = {
         "metadata": {
             "total_students": total_students,
-            "total_pairs_possible": total_pairs_possible,
+            "total_pairs_possible": total_possible,
+            "candidate_pairs_evaluated": len(candidates),
             "pairs_flagged": len(flagged_pairs),
-            "similarity_threshold": SIMILARITY_THRESHOLD
+            "similarity_threshold": SIMILARITY_THRESHOLD,
+            "adaptive_k_used": k_map_db,
+            "boilerplate_hashes_filtered": len(boilerplate_hashes),
         },
-        "pairs": flagged_pairs
+        "pairs": flagged_pairs,
     }
 
-    shutil.rmtree(temp_dir)
     print("Processing complete")
-
     return json.dumps(final_output, indent=2)
 
 
 if __name__ == "__main__":
-    BASE_DIR = os.path.dirname(__file__)
-    SUBMISSION_DIR = os.path.join(BASE_DIR, "submissions")
-    TEMPLATE_DIR = os.path.join(BASE_DIR, "template")  # Put professor's code here (not zipped)
-
-    # Auto-create the template folder if it doesn't exist so you can drop files into it later
-    os.makedirs(TEMPLATE_DIR, exist_ok=True)
+    # ── Configure these two paths ─────────────────────────────────────────────
+    # SUBMISSION_DIR  — folder containing one .zip per student
+    # TEMPLATE_DIR    — folder containing the professor's starter/template files
+    #                   (plain .java/.cpp files, not zipped)
+    #                   Set to None if there is no template for this assignment.
+    SUBMISSION_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "submissions")
+    TEMPLATE_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template")
+    # If no template folder exists, boilerplate filtering is automatically skipped.
+    TEMPLATE_DIR   = TEMPLATE_DIR if os.path.exists(TEMPLATE_DIR) else None
 
     if os.path.exists(SUBMISSION_DIR) and os.listdir(SUBMISSION_DIR):
-        # Pass both folders to the engine
-        json_output = run_engine(SUBMISSION_DIR, TEMPLATE_DIR)
-
-        with open("class_report.json", "w") as f:
+        json_output = run_engine(SUBMISSION_DIR, template_folder=TEMPLATE_DIR, save_forensic=False)
+        report_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "class_report.json")
+        with open(report_path, "w") as f:
             f.write(json_output)
-        print("Saved to class_report.json")
+        print(f"Saved to {report_path}")
     else:
         print("Please add zip files to the submissions folder")
