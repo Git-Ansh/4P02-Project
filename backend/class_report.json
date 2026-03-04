@@ -1,0 +1,451 @@
+{
+  "metadata": {
+    "total_students": 22,
+    "total_pairs_possible": 231,
+    "candidate_pairs_evaluated": 24,
+    "pairs_flagged": 8,
+    "similarity_threshold": 0.15,
+    "adaptive_k_used": {
+      "09": {
+        "09/Level6.java": 5
+      },
+      "sub2.java": {
+        "sub2.java": 5
+      },
+      "08": {
+        "08/Kasus1L6.java": 5
+      },
+      "10": {
+        "01/L6.java": 5
+      },
+      "05": {
+        "05/HelloWorld.java": 5
+      },
+      "04": {
+        "04/T1.java": 5
+      },
+      "12": {
+        "02/Main.java": 5
+      },
+      "06": {
+        "06/HelloWorld.java": 5
+      },
+      "07": {
+        "07/Main.java": 5
+      },
+      "13": {
+        "03/Main.java": 5
+      },
+      "17": {
+        "07/PrintJava.java": 5
+      },
+      "T1.java": {
+        "T1.java": 5
+      },
+      "03": {
+        "03/Main.java": 5
+      },
+      "02": {
+        "02/Main.java": 5
+      },
+      "14": {
+        "04/WelcomeToJava.java": 5
+      },
+      "16": {
+        "06/hellow.java": 5
+      },
+      "sub1.java": {
+        "sub1.java": 5
+      },
+      "15": {
+        "05/HelloWorld.java": 5
+      },
+      "01": {
+        "01/L1.java": 5
+      },
+      "studentA": {
+        "studentA.java": 9
+      },
+      "studentC": {
+        "studentC.java": 7
+      },
+      "studentB": {
+        "studentB.java": 9
+      }
+    },
+    "boilerplate_hashes_filtered": 4
+  },
+  "pairs": [
+    {
+      "pair_id": "13_17",
+      "student_1": "13",
+      "student_2": "17",
+      "similarity": 1.0,
+      "severity_score": 0.95,
+      "summary": {
+        "total_blocks": 1,
+        "high_confidence_blocks": 1,
+        "total_suspicious_lines_a": 6,
+        "total_suspicious_lines_b": 9,
+        "average_density": 0.833
+      },
+      "blocks": [
+        {
+          "block_id": 1,
+          "file_a": "03/Main.java",
+          "file_b": "07/PrintJava.java",
+          "start_a": 15,
+          "end_a": 20,
+          "start_b": 11,
+          "end_b": 19,
+          "block_length": 6,
+          "density": 0.833,
+          "confidence": "HIGH"
+        }
+      ],
+      "files": {
+        "13": {
+          "03/Main.java": [
+            {
+              "block_id": 1,
+              "start": 15,
+              "end": 20
+            }
+          ]
+        },
+        "17": {
+          "07/PrintJava.java": [
+            {
+              "block_id": 1,
+              "start": 11,
+              "end": 19
+            }
+          ]
+        }
+      },
+      "sources": {
+        "13": {
+          "03/Main.java": "\n\n\n\n/*\n * To change this license header, choose License Headers in Project Properties.\n * To change this template file, choose Tools | Templates\n * and open the template in the editor.\n */\n\n/**\n *\n * @author 020A6EC1A4D0C5BDB29FF826A462DA1C5D88CF08B60A4744AFFD95C61A0C3C7E\n */\npublic class Main {\n    public static void main(String[] args) { \n        cetak();\n    }\n    public static void cetak(){\n        for (int i = 5; i > -1; i--) {\n            System.out.println(\"Welcome to Java\"); \n            \n        }\n    }\n}\n"
+        },
+        "17": {
+          "07/PrintJava.java": "/*\r\n * To change this license header, choose License Headers in Project Properties.\r\n * To change this template file, choose Tools | Templates\r\n * and open the template in the editor.\r\n */\r\n\r\n/**\r\n *\r\n * @author E3AFED0047B08059D0FADA10F400C1E5\r\n */\r\npublic class PrintJava {\r\n\r\n    public static void main(String[] args) {\r\n        printAll();\r\n    }\r\n\r\n    public static void printAll() {\r\n        //mencetak welcome to java sebanyak 5 kali\r\n        for (int i = 5; i > 0; i--) {\r\n            System.out.print(\"Welcome to Java\");\r\n            System.out.println(\"\");\r\n        }\r\n    }\r\n\r\n}\r\n"
+        }
+      }
+    },
+    {
+      "pair_id": "15_17",
+      "student_1": "15",
+      "student_2": "17",
+      "similarity": 0.4259,
+      "severity_score": 0.713,
+      "summary": {
+        "total_blocks": 1,
+        "high_confidence_blocks": 1,
+        "total_suspicious_lines_a": 4,
+        "total_suspicious_lines_b": 7,
+        "average_density": 1.0
+      },
+      "blocks": [
+        {
+          "block_id": 1,
+          "file_a": "05/HelloWorld.java",
+          "file_b": "07/PrintJava.java",
+          "start_a": 3,
+          "end_a": 6,
+          "start_b": 13,
+          "end_b": 19,
+          "block_length": 4,
+          "density": 1.0,
+          "confidence": "HIGH"
+        }
+      ],
+      "files": {
+        "15": {
+          "05/HelloWorld.java": [
+            {
+              "block_id": 1,
+              "start": 3,
+              "end": 6
+            }
+          ]
+        },
+        "17": {
+          "07/PrintJava.java": [
+            {
+              "block_id": 1,
+              "start": 13,
+              "end": 19
+            }
+          ]
+        }
+      },
+      "sources": {
+        "15": {
+          "05/HelloWorld.java": "class HelloWorld\r\n{\r\n\tstatic String s;\r\n\tstatic void Cetak()\r\n\t{\r\n\t\tfor(int a=5;a>0;a--)\r\n\t\tSystem.out.println(s);\r\n\r\n\t}\r\n\tpublic static void main(String[] args)\r\n\t{\r\n\t\ts = \"Welcome to Java\";\r\n\t\t// code to print \"Welcome to Java\"\r\n\t\tCetak();\r\n\t\t\r\n\t\t//End of code\r\n\t\t// 25779F8829AB7A7650E85A4CC871E6AC Ganteng\r\n\t\t\r\n\t}\r\n\t\r\n}"
+        },
+        "17": {
+          "07/PrintJava.java": "/*\r\n * To change this license header, choose License Headers in Project Properties.\r\n * To change this template file, choose Tools | Templates\r\n * and open the template in the editor.\r\n */\r\n\r\n/**\r\n *\r\n * @author E3AFED0047B08059D0FADA10F400C1E5\r\n */\r\npublic class PrintJava {\r\n\r\n    public static void main(String[] args) {\r\n        printAll();\r\n    }\r\n\r\n    public static void printAll() {\r\n        //mencetak welcome to java sebanyak 5 kali\r\n        for (int i = 5; i > 0; i--) {\r\n            System.out.print(\"Welcome to Java\");\r\n            System.out.println(\"\");\r\n        }\r\n    }\r\n\r\n}\r\n"
+        }
+      }
+    },
+    {
+      "pair_id": "13_15",
+      "student_1": "13",
+      "student_2": "15",
+      "similarity": 0.4259,
+      "severity_score": 0.653,
+      "summary": {
+        "total_blocks": 1,
+        "high_confidence_blocks": 1,
+        "total_suspicious_lines_a": 5,
+        "total_suspicious_lines_b": 4,
+        "average_density": 0.8
+      },
+      "blocks": [
+        {
+          "block_id": 1,
+          "file_a": "03/Main.java",
+          "file_b": "05/HelloWorld.java",
+          "start_a": 16,
+          "end_a": 20,
+          "start_b": 3,
+          "end_b": 6,
+          "block_length": 5,
+          "density": 0.8,
+          "confidence": "HIGH"
+        }
+      ],
+      "files": {
+        "13": {
+          "03/Main.java": [
+            {
+              "block_id": 1,
+              "start": 16,
+              "end": 20
+            }
+          ]
+        },
+        "15": {
+          "05/HelloWorld.java": [
+            {
+              "block_id": 1,
+              "start": 3,
+              "end": 6
+            }
+          ]
+        }
+      },
+      "sources": {
+        "13": {
+          "03/Main.java": "\n\n\n\n/*\n * To change this license header, choose License Headers in Project Properties.\n * To change this template file, choose Tools | Templates\n * and open the template in the editor.\n */\n\n/**\n *\n * @author 020A6EC1A4D0C5BDB29FF826A462DA1C5D88CF08B60A4744AFFD95C61A0C3C7E\n */\npublic class Main {\n    public static void main(String[] args) { \n        cetak();\n    }\n    public static void cetak(){\n        for (int i = 5; i > -1; i--) {\n            System.out.println(\"Welcome to Java\"); \n            \n        }\n    }\n}\n"
+        },
+        "15": {
+          "05/HelloWorld.java": "class HelloWorld\r\n{\r\n\tstatic String s;\r\n\tstatic void Cetak()\r\n\t{\r\n\t\tfor(int a=5;a>0;a--)\r\n\t\tSystem.out.println(s);\r\n\r\n\t}\r\n\tpublic static void main(String[] args)\r\n\t{\r\n\t\ts = \"Welcome to Java\";\r\n\t\t// code to print \"Welcome to Java\"\r\n\t\tCetak();\r\n\t\t\r\n\t\t//End of code\r\n\t\t// 25779F8829AB7A7650E85A4CC871E6AC Ganteng\r\n\t\t\r\n\t}\r\n\t\r\n}"
+        }
+      }
+    },
+    {
+      "pair_id": "sub1.java_sub2.java",
+      "student_1": "sub1.java",
+      "student_2": "sub2.java",
+      "similarity": 1.0,
+      "severity_score": 0.65,
+      "summary": {
+        "total_blocks": 1,
+        "high_confidence_blocks": 0,
+        "total_suspicious_lines_a": 4,
+        "total_suspicious_lines_b": 4,
+        "average_density": 0.5
+      },
+      "blocks": [
+        {
+          "block_id": 1,
+          "file_a": "sub1.java",
+          "file_b": "sub2.java",
+          "start_a": 24,
+          "end_a": 27,
+          "start_b": 24,
+          "end_b": 27,
+          "block_length": 4,
+          "density": 0.5,
+          "confidence": "LOW"
+        }
+      ],
+      "files": {
+        "sub1.java": {
+          "sub1.java": [
+            {
+              "block_id": 1,
+              "start": 24,
+              "end": 27
+            }
+          ]
+        },
+        "sub2.java": {
+          "sub2.java": [
+            {
+              "block_id": 1,
+              "start": 24,
+              "end": 27
+            }
+          ]
+        }
+      },
+      "sources": {
+        "sub1.java": {
+          "sub1.java": "import java.util.*;\n\npublic class sub1 {\n\n    protected Scanner scanner;\n\n    public sub1() {\n        init();\n    }\n\n    protected void init() {\n        scanner = new Scanner(System.in);\n        System.out.println(\"Program Started\");\n    }\n\n    protected void close() {\n        scanner.close();\n    }\n\n    public void calculateSum() {\n        int a = scanner.nextInt();\n        int b = scanner.nextInt();\n        int sum = a + b;\n        System.out.println(\"Sum: \" + sum);\n    }\n\n    public static void main(String[] args) {\n        sub1 app = new sub1();\n        app.calculateSum();\n        app.close();\n    }\n}"
+        },
+        "sub2.java": {
+          "sub2.java": "import java.util.*;\n\npublic class sub2 {\n\n    protected Scanner scanner;\n\n    public sub2() {\n        init();\n    }\n\n    protected void init() {\n        scanner = new Scanner(System.in);\n        System.out.println(\"Program Started\");\n    }\n\n    protected void close() {\n        scanner.close();\n    }\n\n    public void calculateProduct() {\n        int a = scanner.nextInt();\n        int b = scanner.nextInt();\n        int product = a * b;\n        System.out.println(\"Product: \" + product);\n    }\n\n    public static void main(String[] args) {\n        sub2 app = new sub2();\n        app.calculateProduct();\n        app.close();\n    }\n}"
+        }
+      }
+    },
+    {
+      "pair_id": "08_09",
+      "student_1": "08",
+      "student_2": "09",
+      "similarity": 1.0,
+      "severity_score": 0.625,
+      "summary": {
+        "total_blocks": 2,
+        "high_confidence_blocks": 0,
+        "total_suspicious_lines_a": 9,
+        "total_suspicious_lines_b": 7,
+        "average_density": 0.417
+      },
+      "blocks": [
+        {
+          "block_id": 1,
+          "file_a": "08/Kasus1L6.java",
+          "file_b": "09/Level6.java",
+          "start_a": 11,
+          "end_a": 16,
+          "start_b": 11,
+          "end_b": 13,
+          "block_length": 6,
+          "density": 0.167,
+          "confidence": "LOW"
+        },
+        {
+          "block_id": 2,
+          "file_a": "08/Kasus1L6.java",
+          "file_b": "09/Level6.java",
+          "start_a": 21,
+          "end_a": 23,
+          "start_b": 19,
+          "end_b": 22,
+          "block_length": 3,
+          "density": 0.667,
+          "confidence": "MEDIUM"
+        }
+      ],
+      "files": {
+        "08": {
+          "08/Kasus1L6.java": [
+            {
+              "block_id": 1,
+              "start": 11,
+              "end": 16
+            },
+            {
+              "block_id": 2,
+              "start": 21,
+              "end": 23
+            }
+          ]
+        },
+        "09": {
+          "09/Level6.java": [
+            {
+              "block_id": 1,
+              "start": 11,
+              "end": 13
+            },
+            {
+              "block_id": 2,
+              "start": 19,
+              "end": 22
+            }
+          ]
+        }
+      },
+      "sources": {
+        "08": {
+          "08/Kasus1L6.java": "/*\r\n * To change this license header, choose License Headers in Project Properties.\r\n * To change this template file, choose Tools | Templates\r\n * and open the template in the editor.\r\n */\r\n\r\n/**\r\n *\r\n * @author B15130F5DDB6B5F1622EF91DAC4C1AAE\r\n */\r\npublic class Kasus1L6 {\r\n    \r\n    /**\r\n     * @param args the command line arguments\r\n     */\r\n    public static void main(String[] args) {\r\n        //Print Welcome to java 5 kali\r\n        cetakTeks(\"Welcome to Java\");\r\n    }\r\n\r\n    private static void cetakTeks(String teks) {\r\n        int i = 5;\r\n        while(i > 0){\r\n            System.out.println(teks);\r\n            i--;\r\n        }\r\n    }\r\n}\r\n"
+        },
+        "09": {
+          "09/Level6.java": "/*\r\n * To change this license header, choose License Headers in Project Properties.\r\n * To change this template file, choose Tools | Templates\r\n * and open the template in the editor.\r\n */\r\n\r\n/**\r\n *\r\n * @author FD8DBE9073AFCC0504CD6901E1091CAD\r\n */\r\npublic class Level6 \r\n{\r\n    public static void main(String[] args) \r\n    {\r\n        String input = \"Welcome to Java\\n\";\r\n        keluaran(input);\r\n    }\r\n    \r\n    private static void keluaran(String kal) \r\n    {\r\n        int limit=0; //batas perulangan\r\n        while(limit!=5) //perulangan sebanyak 5x\r\n        {\r\n            System.out.print(kal);\r\n            limit++;\r\n        }\r\n    }\r\n}\r\n"
+        }
+      }
+    },
+    {
+      "pair_id": "10_13",
+      "student_1": "10",
+      "student_2": "13",
+      "similarity": 0.3041,
+      "severity_score": 0.1521,
+      "summary": {
+        "total_blocks": 0,
+        "high_confidence_blocks": 0,
+        "total_suspicious_lines_a": 0,
+        "total_suspicious_lines_b": 0,
+        "average_density": 0
+      },
+      "blocks": [],
+      "files": {
+        "10": {},
+        "13": {}
+      },
+      "sources": {
+        "10": {},
+        "13": {}
+      }
+    },
+    {
+      "pair_id": "10_17",
+      "student_1": "10",
+      "student_2": "17",
+      "similarity": 0.3041,
+      "severity_score": 0.1521,
+      "summary": {
+        "total_blocks": 0,
+        "high_confidence_blocks": 0,
+        "total_suspicious_lines_a": 0,
+        "total_suspicious_lines_b": 0,
+        "average_density": 0
+      },
+      "blocks": [],
+      "files": {
+        "10": {},
+        "17": {}
+      },
+      "sources": {
+        "10": {},
+        "17": {}
+      }
+    },
+    {
+      "pair_id": "10_15",
+      "student_1": "10",
+      "student_2": "15",
+      "similarity": 0.2171,
+      "severity_score": 0.1086,
+      "summary": {
+        "total_blocks": 0,
+        "high_confidence_blocks": 0,
+        "total_suspicious_lines_a": 0,
+        "total_suspicious_lines_b": 0,
+        "average_density": 0
+      },
+      "blocks": [],
+      "files": {
+        "10": {},
+        "15": {}
+      },
+      "sources": {
+        "10": {},
+        "15": {}
+      }
+    }
+  ]
+}

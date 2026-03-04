@@ -288,8 +288,6 @@ def group_and_merge_matches(matches, min_block_size=3):
     return merged_blocks
 
 
-
-
 # --- New function for full pair object ---
 def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
     """
