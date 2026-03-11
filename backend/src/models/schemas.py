@@ -261,22 +261,3 @@ class AnonymousSubmissionResponse(BaseModel):
     comment: Optional[str] = None
     files: list[SubmissionFileInfo]
     submitted_at: datetime
-
-
-# ── Course Students (instructor-managed enrollment) ──────────────────────
-
-
-class CourseStudentResponse(BaseModel):
-    id: str
-    full_name: str
-    email: str
-    student_number: str
-
-
-class EnrollStudentsRequest(BaseModel):
-    student_ids: list[str] = Field(min_length=1)
-
-
-class SendTokenEmailRequest(BaseModel):
-    student_ids: list[str] = Field(default_factory=list)
-    send_to_all: bool = False

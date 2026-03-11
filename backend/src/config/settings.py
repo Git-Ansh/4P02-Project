@@ -9,12 +9,7 @@ class Settings(BaseSettings):
     JWT_EXPIRY_MINUTES: int = 60
     UPLOAD_DIR: str = "/opt/academic-fbi/uploads"
 
-    # Brevo email (preferred — set API key + from email)
-    BREVO_API_KEY: str = ""
-    BREVO_FROM_EMAIL: str = ""
-    BREVO_FROM_NAME: str = "AcademicFBI"
-
-    # SMTP fallback (used only if Brevo is not set)
+    # SMTP settings for email receipts (optional — emails silently skip if not set)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

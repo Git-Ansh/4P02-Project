@@ -22,9 +22,6 @@ pygments>=2.17.0
 pycparser>=2.21
 javalang>=0.13.0
 
-# Email (Brevo API)
-requests>=2.31.0
-
 # Utilities
 python-dotenv>=1.0.0
 pydantic>=2.5.0

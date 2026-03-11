@@ -17,11 +17,6 @@ import {
   Copy,
   Check,
   FileText,
-  Users,
-  UserPlus,
-  X,
-  Mail,
-  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,13 +92,6 @@ interface Submission {
   submitted_at: string;
 }
 
-interface CourseStudent {
-  id: string;
-  full_name: string;
-  email: string;
-  student_number: string;
-}
-
 export default function CourseDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -123,35 +111,6 @@ export default function CourseDetailPage() {
   const [tokenExpiry, setTokenExpiry] = React.useState("");
   const [tokenLoading, setTokenLoading] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-
-  // Token dialog email state
-  const [tokenAssignment, setTokenAssignment] =
-    React.useState<Assignment | null>(null);
-  const [enrolledStudents, setEnrolledStudents] = React.useState<
-    CourseStudent[]
-  >([]);
-  const [selectedStudentIds, setSelectedStudentIds] = React.useState<
-    Set<string>
-  >(new Set());
-  const [emailSending, setEmailSending] = React.useState(false);
-  const [emailSentCount, setEmailSentCount] = React.useState<number | null>(
-    null,
-  );
-
-  // Students management dialog state
-  const [studentsDialogOpen, setStudentsDialogOpen] = React.useState(false);
-  const [availableStudents, setAvailableStudents] = React.useState<
-    CourseStudent[]
-  >([]);
-  const [studentsLoading, setStudentsLoading] = React.useState(false);
-  const [addStudentIds, setAddStudentIds] = React.useState<Set<string>>(
-    new Set(),
-  );
-  const [enrolling, setEnrolling] = React.useState(false);
-  const [studentSearch, setStudentSearch] = React.useState("");
-  const [manageTab, setManageTab] = React.useState<"enrolled" | "add">(
-    "enrolled",
-  );
 
   // Submissions dialog state
   const [submissionsDialogOpen, setSubmissionsDialogOpen] =
@@ -183,24 +142,11 @@ export default function CourseDetailPage() {
     }
   }, [courseId]);
 
-  const fetchEnrolledStudents = React.useCallback(async () => {
-    try {
-      const data = await apiFetch<CourseStudent[]>(
-        `/api/instructor/courses/${courseId}/students`,
-      );
-      setEnrolledStudents(data);
-    } catch (err) {
-      console.error(err);
-    }
-  }, [courseId]);
-
   React.useEffect(() => {
-    Promise.all([
-      fetchCourse(),
-      fetchAssignments(),
-      fetchEnrolledStudents(),
-    ]).finally(() => setLoading(false));
-  }, [fetchCourse, fetchAssignments, fetchEnrolledStudents]);
+    Promise.all([fetchCourse(), fetchAssignments()]).finally(() =>
+      setLoading(false),
+    );
+  }, [fetchCourse, fetchAssignments]);
 
   const handleDeleteAssignment = async (assignmentId: string) => {
     try {
@@ -220,9 +166,6 @@ export default function CourseDetailPage() {
     setTokenValue("");
     setTokenExpiry("");
     setCopied(false);
-    setTokenAssignment(assignment);
-    setSelectedStudentIds(new Set());
-    setEmailSentCount(null);
     try {
       const data = await apiFetch<{ token: string; expires_at: string }>(
         `/api/instructor/courses/${courseId}/assignments/${assignment.id}/token`,
@@ -256,110 +199,6 @@ export default function CourseDetailPage() {
       console.error(err);
     } finally {
       setSubmissionsLoading(false);
-    }
-  };
-
-  const handleOpenManageStudents = async () => {
-    setStudentsDialogOpen(true);
-    setStudentsLoading(true);
-    setManageTab("enrolled");
-    setStudentSearch("");
-    setAddStudentIds(new Set());
-    try {
-      const [enrolled, available] = await Promise.all([
-        apiFetch<CourseStudent[]>(
-          `/api/instructor/courses/${courseId}/students`,
-        ),
-        apiFetch<CourseStudent[]>(
-          `/api/instructor/courses/${courseId}/available-students`,
-        ),
-      ]);
-      setEnrolledStudents(enrolled);
-      setAvailableStudents(available);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setStudentsLoading(false);
-    }
-  };
-
-  const handleEnrollStudents = async () => {
-    if (addStudentIds.size === 0) return;
-    setEnrolling(true);
-    try {
-      const data = await apiFetch<CourseStudent[]>(
-        `/api/instructor/courses/${courseId}/students`,
-        {
-          method: "POST",
-          body: JSON.stringify({ student_ids: Array.from(addStudentIds) }),
-        },
-      );
-      setEnrolledStudents(data);
-      setAvailableStudents((prev) =>
-        prev.filter((s) => !addStudentIds.has(s.id)),
-      );
-      setAddStudentIds(new Set());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setEnrolling(false);
-    }
-  };
-
-  const handleRemoveStudent = async (studentId: string) => {
-    try {
-      await apiFetch(
-        `/api/instructor/courses/${courseId}/students/${studentId}`,
-        { method: "DELETE" },
-      );
-      setEnrolledStudents((prev) => prev.filter((s) => s.id !== studentId));
-      // Refresh available list if the dialog is open
-      const student = enrolledStudents.find((s) => s.id === studentId);
-      if (student) {
-        setAvailableStudents((prev) => [...prev, student]);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleSendTokenEmail = async () => {
-    if (!tokenAssignment || selectedStudentIds.size === 0) return;
-    setEmailSending(true);
-    setEmailSentCount(null);
-    try {
-      const data = await apiFetch<{ sent_count: number }>(
-        `/api/instructor/courses/${courseId}/assignments/${tokenAssignment.id}/send-token`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            student_ids: Array.from(selectedStudentIds),
-          }),
-        },
-      );
-      setEmailSentCount(data.sent_count);
-      setSelectedStudentIds(new Set());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setEmailSending(false);
-    }
-  };
-
-  const toggleStudentSelection = (id: string) => {
-    setSelectedStudentIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedStudentIds.size === enrolledStudents.length) {
-      setSelectedStudentIds(new Set());
-    } else {
-      setSelectedStudentIds(new Set(enrolledStudents.map((s) => s.id)));
     }
   };
 
@@ -563,208 +402,6 @@ export default function CourseDetailPage() {
         </div>
       )}
 
-      {/* Students section */}
-      <div className="mt-8 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-            <div className="flex items-center gap-3">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <CardTitle className="text-lg">Students</CardTitle>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {enrolledStudents.length} enrolled student
-                  {enrolledStudents.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-            </div>
-            <Button variant="outline" onClick={handleOpenManageStudents}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Manage Students
-            </Button>
-          </CardHeader>
-        </Card>
-      </div>
-
-      {/* Manage Students Dialog */}
-      <Dialog open={studentsDialogOpen} onOpenChange={setStudentsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Manage Students</DialogTitle>
-            <DialogDescription>
-              Enroll or remove students from {course.code}.
-            </DialogDescription>
-          </DialogHeader>
-
-          {studentsLoading ? (
-            <div className="flex justify-center py-6">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              <div className="flex gap-2 border-b">
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    manageTab === "enrolled"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => {
-                    setManageTab("enrolled");
-                    setStudentSearch("");
-                  }}
-                >
-                  Enrolled ({enrolledStudents.length})
-                </button>
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    manageTab === "add"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => {
-                    setManageTab("add");
-                    setStudentSearch("");
-                  }}
-                >
-                  Add Students
-                </button>
-              </div>
-
-              {manageTab === "enrolled" ? (
-                enrolledStudents.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-6">
-                    No students enrolled yet.
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Student #</TableHead>
-                        <TableHead className="w-[60px]" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {enrolledStudents.map((s) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="font-medium">
-                            {s.full_name}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {s.email}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {s.student_number}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveStudent(s.id)}
-                              title="Remove student"
-                            >
-                              <X className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )
-              ) : (
-                <div className="space-y-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <input
-                      placeholder="Search by name, email, or student number..."
-                      value={studentSearch}
-                      onChange={(e) => setStudentSearch(e.target.value)}
-                      className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </div>
-                  {(() => {
-                    const q = studentSearch.toLowerCase();
-                    const filtered = availableStudents.filter(
-                      (s) =>
-                        s.full_name.toLowerCase().includes(q) ||
-                        s.email.toLowerCase().includes(q) ||
-                        s.student_number.toLowerCase().includes(q),
-                    );
-                    if (filtered.length === 0) {
-                      return (
-                        <p className="text-center text-muted-foreground py-6">
-                          No available students found.
-                        </p>
-                      );
-                    }
-                    return (
-                      <>
-                        <div className="max-h-[40vh] overflow-y-auto border rounded-md">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-[40px]" />
-                                <TableHead>Name</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Student #</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {filtered.map((s) => (
-                                <TableRow
-                                  key={s.id}
-                                  className="cursor-pointer"
-                                  onClick={() =>
-                                    setAddStudentIds((prev) => {
-                                      const next = new Set(prev);
-                                      if (next.has(s.id)) next.delete(s.id);
-                                      else next.add(s.id);
-                                      return next;
-                                    })
-                                  }
-                                >
-                                  <TableCell>
-                                    <input
-                                      type="checkbox"
-                                      checked={addStudentIds.has(s.id)}
-                                      onChange={() => {}}
-                                      className="rounded border-input"
-                                    />
-                                  </TableCell>
-                                  <TableCell className="font-medium">
-                                    {s.full_name}
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    {s.email}
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    {s.student_number}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                        <Button
-                          onClick={handleEnrollStudents}
-                          disabled={addStudentIds.size === 0 || enrolling}
-                        >
-                          {enrolling && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          )}
-                          Add Selected ({addStudentIds.size})
-                        </Button>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Edit Assignment Dialog */}
       <Dialog
         open={!!editAssignment}
@@ -792,7 +429,7 @@ export default function CourseDetailPage() {
 
       {/* Token Dialog */}
       <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Submission Token</DialogTitle>
             <DialogDescription>
@@ -827,82 +464,6 @@ export default function CourseDetailPage() {
                   )}
                 </Button>
               </div>
-
-              {/* Email to students section */}
-              {enrolledStudents.length > 0 && (
-                <div className="border-t pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      Email to Students
-                    </h4>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={
-                          selectedStudentIds.size === enrolledStudents.length
-                        }
-                        onChange={toggleSelectAll}
-                        className="rounded border-input"
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        Select All
-                      </span>
-                    </label>
-                  </div>
-                  <div className="max-h-[200px] overflow-y-auto border rounded-md">
-                    {enrolledStudents.map((s) => (
-                      <label
-                        key={s.id}
-                        className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStudentIds.has(s.id)}
-                          onChange={() => toggleStudentSelection(s.id)}
-                          className="rounded border-input"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {s.full_name}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {s.email}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  <Button
-                    onClick={handleSendTokenEmail}
-                    disabled={
-                      selectedStudentIds.size === 0 || emailSending
-                    }
-                    className="w-full"
-                  >
-                    {emailSending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Mail className="mr-2 h-4 w-4" />
-                    )}
-                    Send via Email ({selectedStudentIds.size})
-                  </Button>
-                  {emailSentCount !== null && (
-                    <p className="text-sm text-center text-green-600 flex items-center justify-center gap-1">
-                      <Check className="h-4 w-4" />
-                      Sent to {emailSentCount} student
-                      {emailSentCount !== 1 ? "s" : ""}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {enrolledStudents.length === 0 && (
-                <p className="text-xs text-muted-foreground border-t pt-3">
-                  No students enrolled. Add students to email the submission
-                  link.
-                </p>
-              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
