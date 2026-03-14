@@ -22,8 +22,8 @@ export async function apiFetch<T = unknown>(
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
-  // Only set Content-Type for requests with a body
-  if (options.body) {
+  // Only set Content-Type for non-FormData bodies (browser sets it for FormData)
+  if (options.body && !(options.body instanceof FormData)) {
     headers["Content-Type"] = headers["Content-Type"] || "application/json";
   }
   if (token) {

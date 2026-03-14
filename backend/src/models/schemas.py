@@ -135,6 +135,34 @@ class CourseResponse(BaseModel):
 
 class InstructorDashboardStats(BaseModel):
     course_count: int
+    total_assignments: int = 0
+    total_submissions: int = 0
+    recent_analyses: list[dict] = []
+    flagged_pairs: list[dict] = []
+
+
+class AnalysisRunResponse(BaseModel):
+    id: str
+    status: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class AnalysisReportResponse(BaseModel):
+    id: str
+    status: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    error: Optional[str] = None
+    metadata: Optional[dict] = None
+    pairs: Optional[list[dict]] = None
+
+
+class ReferenceSubmissionResponse(BaseModel):
+    id: str
+    filename: str
+    student_count: int
+    uploaded_at: datetime
 
 
 class AssignmentCreate(BaseModel):
@@ -261,3 +289,22 @@ class AnonymousSubmissionResponse(BaseModel):
     comment: Optional[str] = None
     files: list[SubmissionFileInfo]
     submitted_at: datetime
+
+
+# ── Course Students (instructor view) ─────────────────────────────────────
+
+
+class CourseStudentResponse(BaseModel):
+    id: str
+    full_name: str
+    email: str
+    student_number: str
+
+
+class EnrollStudentsRequest(BaseModel):
+    student_ids: list[str] = Field(min_length=1)
+
+
+class SendTokenEmailRequest(BaseModel):
+    student_ids: list[str] = Field(default_factory=list)
+    send_to_all: bool = False

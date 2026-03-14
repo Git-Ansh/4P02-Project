@@ -21,6 +21,9 @@ redis>=5.0.0
 pygments>=2.17.0
 pycparser>=2.21
 javalang>=0.13.0
+tree-sitter>=0.21.0
+tree-sitter-java>=0.21.0
+tree-sitter-cpp>=0.21.0
 
 # Utilities
 python-dotenv>=1.0.0

@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "AcademicFBI"
 
-    model_config = {"env_file": ".env"}
+    # Brevo (Sendinblue) API settings (preferred over SMTP)
+    BREVO_API_KEY: str = ""
+    BREVO_FROM_EMAIL: str = ""
+    BREVO_FROM_NAME: str = "AcademicFBI"
+
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

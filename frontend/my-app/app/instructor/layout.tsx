@@ -3,33 +3,14 @@
 import {
   LayoutDashboard,
   GraduationCap,
-  FileSearch,
-  ClipboardList,
+  Shield,
 } from "lucide-react";
 import { UniversityLayout } from "@/components/university-layout";
 
 const navItems = [
-  {
-    href: "/instructor",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    exact: true,
-  },
-  {
-    href: "/instructor/courses",
-    label: "Courses",
-    icon: GraduationCap,
-  },
-  {
-    href: "/instructor/submissions",
-    label: "Submissions",
-    icon: ClipboardList,
-  },
-  {
-    href: "/instructor/compare",
-    label: "Compare",
-    icon: FileSearch,
-  },
+  { href: "/instructor", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/instructor/courses", label: "Courses", icon: GraduationCap },
+  { href: "/instructor/analysis", label: "Analysis", icon: Shield },
 ];
 
 export default function InstructorLayout({
