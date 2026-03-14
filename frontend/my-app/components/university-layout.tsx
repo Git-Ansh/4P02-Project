@@ -55,6 +55,7 @@ function SidebarContent({
             width={36}
             height={36}
             className="rounded"
+            style={{ width: "auto", height: "auto" }}
           />
         ) : (
           <div className="flex h-9 w-9 items-center justify-center rounded bg-primary/10 text-primary font-bold text-lg">
@@ -179,6 +180,7 @@ export function UniversityLayout({ navItems, children }: UniversityLayoutProps) 
                 width={28}
                 height={28}
                 className="rounded"
+                style={{ width: "auto", height: "auto" }}
               />
             ) : (
               <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary font-bold text-sm">

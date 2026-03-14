@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Code2, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { Code2, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -94,21 +94,16 @@ function fileHasAllowedExt(fileName: string, allowed: string[]) {
   return allowed.some((ext) => lower.endsWith(ext));
 }
 
-function SubmitPageInner() {
+export default function SubmitPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const universitySlug = searchParams.get("university") || "";
 
-  // Read token from URL — if present, skip manual entry entirely
-  const urlToken = searchParams.get("token") || "";
-
-  // Stages: "loading" (auto-verifying URL token) | "token" | "form" | "done"
-  const [stage, setStage] = React.useState<"loading" | "token" | "form" | "done">(
-    urlToken ? "loading" : "token",
-  );
+  // Stages: "token" | "form" | "done"
+  const [stage, setStage] = React.useState<"token" | "form" | "done">("token");
 
   // Token stage
-  const [token, setToken] = React.useState(urlToken);
+  const [token, setToken] = React.useState("");
   const [verifying, setVerifying] = React.useState(false);
   const [tokenError, setTokenError] = React.useState("");
 
@@ -136,34 +131,6 @@ function SubmitPageInner() {
   const assignmentLanguage = (assignment?.language || "") as Language | "";
   const allowedExts = React.useMemo(() => getAllowedExts(assignmentLanguage), [assignmentLanguage]);
 
-  // Auto-verify token from URL — fires once on mount when token is in the link
-  const hasAutoVerified = React.useRef(false);
-  React.useEffect(() => {
-    if (!urlToken || hasAutoVerified.current) return;
-    hasAutoVerified.current = true;
-
-    (async () => {
-      try {
-        const res = await fetch(
-          `${API_BASE}/api/public/assignment?token=${encodeURIComponent(urlToken)}`,
-        );
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail || "Invalid or expired token");
-        }
-        const data: AssignmentInfo = await res.json();
-        setAssignment(data);
-        setStage("form");
-      } catch (err: unknown) {
-        // Token invalid — fall back to manual entry with error shown
-        setTokenError(
-          err instanceof Error ? err.message : "Failed to verify token",
-        );
-        setStage("token");
-      }
-    })();
-  }, [urlToken]);
-
   React.useEffect(() => {
     if (universitySlug) {
       getUniversityTheme(universitySlug).then(setTheme);
@@ -187,68 +154,6 @@ function SubmitPageInner() {
       document.body.classList.remove("university-theme");
     };
   }, [themeStyle]);
-
-  // ── Live countdown timer ─────────────────────────────────────────────────
-  const [countdown, setCountdown] = React.useState("");
-  const [expired, setExpired] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!assignment?.due_date) return;
-
-    const tick = () => {
-      const now = Date.now();
-      const due = new Date(assignment.due_date!).getTime();
-      const diff = due - now;
-
-      if (diff <= 0) {
-        setCountdown("Deadline passed");
-        setExpired(true);
-        return;
-      }
-
-      setExpired(false);
-      const days = Math.floor(diff / 86400000);
-      const hrs = Math.floor((diff % 86400000) / 3600000);
-      const mins = Math.floor((diff % 3600000) / 60000);
-      const secs = Math.floor((diff % 60000) / 1000);
-
-      if (days > 0) {
-        setCountdown(`${days}d ${hrs}h ${mins}m ${secs}s remaining`);
-      } else if (hrs > 0) {
-        setCountdown(`${hrs}h ${mins}m ${secs}s remaining`);
-      } else {
-        setCountdown(`${mins}m ${secs}s remaining`);
-      }
-    };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [assignment?.due_date]);
-
-  // Periodically re-fetch assignment to pick up deadline extensions
-  React.useEffect(() => {
-    if (stage !== "form" || !token) return;
-
-    const refresh = async () => {
-      try {
-        const res = await fetch(
-          `${API_BASE}/api/public/assignment?token=${encodeURIComponent(token)}`,
-        );
-        if (!res.ok) return;
-        const data: AssignmentInfo = await res.json();
-        // Only update due_date to avoid resetting form state
-        if (data.due_date !== assignment?.due_date) {
-          setAssignment((prev) => prev ? { ...prev, due_date: data.due_date } : prev);
-        }
-      } catch {
-        // silent — just a background refresh
-      }
-    };
-
-    const id = setInterval(refresh, 60_000); // check every 60s
-    return () => clearInterval(id);
-  }, [stage, token, assignment?.due_date]);
 
   // ── Token verification ────────────────────────────────────────────────────
 
@@ -442,14 +347,6 @@ function SubmitPageInner() {
 
       <div className="flex-1 flex items-start justify-center px-4 py-8">
         <div className="w-full max-w-3xl space-y-6">
-          {/* ── Loading: auto-verifying URL token ─────────────────────── */}
-          {stage === "loading" && (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Verifying submission link...</p>
-            </div>
-          )}
-
           {/* ── Stage 1: Token Entry ─────────────────────────────────── */}
           {stage === "token" && (
             <Card>
@@ -511,21 +408,6 @@ function SubmitPageInner() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  {assignment.due_date && countdown && (
-                    <div className={`flex items-center gap-2 rounded-md border px-3 py-2 ${
-                      expired
-                        ? "border-red-300 bg-red-50 text-red-700"
-                        : "border-amber-300 bg-amber-50 text-amber-800"
-                    }`}>
-                      <Clock className="h-4 w-4 shrink-0" />
-                      <span className="font-medium text-sm tabular-nums">
-                        {expired ? "Deadline passed" : countdown}
-                      </span>
-                      <span className="text-xs opacity-70 ml-auto">
-                        Due: {new Date(assignment.due_date).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-muted-foreground">
                     <span>
                       Instructor:{" "}
@@ -533,6 +415,14 @@ function SubmitPageInner() {
                         {assignment.instructor_name}
                       </span>
                     </span>
+                    {assignment.due_date && (
+                      <span>
+                        Due:{" "}
+                        <span className="text-foreground">
+                          {new Date(assignment.due_date).toLocaleString()}
+                        </span>
+                      </span>
+                    )}
                     <span>
                       Resubmission:{" "}
                       <span className="text-foreground">
@@ -822,19 +712,5 @@ function SubmitPageInner() {
         </Link>
       </footer>
     </div>
-  );
-}
-
-export default function SubmitPage() {
-  return (
-    <React.Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      }
-    >
-      <SubmitPageInner />
-    </React.Suspense>
   );
 }

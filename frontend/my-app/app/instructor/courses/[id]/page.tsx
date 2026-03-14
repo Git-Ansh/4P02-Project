@@ -22,6 +22,7 @@ import {
   X,
   Mail,
   Search,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -313,7 +314,6 @@ export default function CourseDetailPage() {
         { method: "DELETE" },
       );
       setEnrolledStudents((prev) => prev.filter((s) => s.id !== studentId));
-      // Refresh available list if the dialog is open
       const student = enrolledStudents.find((s) => s.id === studentId);
       if (student) {
         setAvailableStudents((prev) => [...prev, student]);
@@ -515,11 +515,24 @@ export default function CourseDetailPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleViewSubmissions(a)}
+                        asChild
                         title="View Submissions"
                       >
-                        <FileText className="h-3.5 w-3.5 mr-1" />
-                        Submissions
+                        <Link href={`/instructor/courses/${courseId}/assignments/${a.id}/submissions`}>
+                          <FileText className="h-3.5 w-3.5 mr-1" />
+                          Submissions
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        title="Run Analysis"
+                      >
+                        <Link href={`/instructor/courses/${courseId}/assignments/${a.id}/analysis`}>
+                          <Shield className="h-3.5 w-3.5 mr-1" />
+                          Analysis
+                        </Link>
                       </Button>
                       <Button
                         variant="outline"

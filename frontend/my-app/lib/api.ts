@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   constructor(
@@ -22,8 +22,8 @@ export async function apiFetch<T = unknown>(
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
-  // Only set Content-Type for requests with a body
-  if (options.body) {
+  // Only set Content-Type for non-FormData bodies (browser sets it for FormData)
+  if (options.body && !(options.body instanceof FormData)) {
     headers["Content-Type"] = headers["Content-Type"] || "application/json";
   }
   if (token) {

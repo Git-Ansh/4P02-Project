@@ -135,6 +135,34 @@ class CourseResponse(BaseModel):
 
 class InstructorDashboardStats(BaseModel):
     course_count: int
+    total_assignments: int = 0
+    total_submissions: int = 0
+    recent_analyses: list[dict] = []
+    flagged_pairs: list[dict] = []
+
+
+class AnalysisRunResponse(BaseModel):
+    id: str
+    status: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class AnalysisReportResponse(BaseModel):
+    id: str
+    status: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    error: Optional[str] = None
+    metadata: Optional[dict] = None
+    pairs: Optional[list[dict]] = None
+
+
+class ReferenceSubmissionResponse(BaseModel):
+    id: str
+    filename: str
+    student_count: int
+    uploaded_at: datetime
 
 
 class AssignmentCreate(BaseModel):
@@ -263,7 +291,7 @@ class AnonymousSubmissionResponse(BaseModel):
     submitted_at: datetime
 
 
-# ── Course Students (instructor-managed enrollment) ──────────────────────
+# ── Course Students (instructor view) ─────────────────────────────────────
 
 
 class CourseStudentResponse(BaseModel):
