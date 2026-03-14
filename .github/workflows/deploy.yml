@@ -5,8 +5,37 @@ on:
     branches: [ main ]
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: python -m pytest tests/ -v --tb=short
+        env:
+          MONGODB_URI: mongodb://localhost:27017
+          JWT_SECRET: test-secret-key-for-testing
+          DB_NAME: test_academic_fbi
+
   deploy:
     name: Deploy to VPS
+    needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
 
