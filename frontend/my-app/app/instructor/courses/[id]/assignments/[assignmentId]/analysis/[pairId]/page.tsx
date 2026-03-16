@@ -283,7 +283,7 @@ export default function PairDetailPage() {
             <SeverityBadge level={focusedBlock.confidence} />
             <span>Density {Math.round(focusedBlock.density * 100)}%</span>
             <span>L{focusedBlock.start_a}{"\u2013"}{focusedBlock.end_a} / L{focusedBlock.start_b}{"\u2013"}{focusedBlock.end_b}</span>
-            <span>{focusedBlock.block_length || focusedBlock.block_length_a} lines</span>
+            <span>{focusedBlock.block_length || focusedBlock.block_length_a || ''} lines</span>
           </div>
         )}
       </div>

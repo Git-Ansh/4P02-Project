@@ -16,8 +16,10 @@ export interface MatchBlock {
   start_b: number;
   end_b: number;
   block_length: number;
+  block_length_a?: number;
+  block_length_b?: number;
   density: number;
-  confidence: "HIGH" | "MEDIUM" | "LOW";
+  confidence: "HIGH" | "MEDIUM" | "LOW" | "FILE";
 }
 
 export interface PairSummary {
