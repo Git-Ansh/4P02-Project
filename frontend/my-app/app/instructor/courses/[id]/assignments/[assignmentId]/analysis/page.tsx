@@ -22,6 +22,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { apiFetch } from "@/lib/api";
 import { AnalysisStatsBar } from "@/components/analysis/analysis-stats-bar";
 import { PairListPanel } from "@/components/analysis/pair-list-panel";
@@ -187,6 +198,18 @@ export default function AssignmentAnalysisPage() {
         { method: "DELETE" },
       );
       await fetchReferences();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    try {
+      await apiFetch(
+        `/api/instructor/courses/${courseId}/assignments/${assignmentId}/analysis`,
+        { method: "DELETE" },
+      );
+      setReport(null);
     } catch (err) {
       console.error(err);
     }
@@ -496,6 +519,7 @@ export default function AssignmentAnalysisPage() {
               </CardContent>
             </Card>
           )}
+
         </>
       )}
     </div>

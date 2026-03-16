@@ -224,19 +224,9 @@ export default function SubmissionsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col gap-0.5">
-                            {sub.files.map((f, fi) => (
-                              <span
-                                key={fi}
-                                className="text-xs text-muted-foreground"
-                              >
-                                {f.name}{" "}
-                                <span className="opacity-60">
-                                  ({formatSize(f.size)})
-                                </span>
-                              </span>
-                            ))}
-                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {sub.files.length} file{sub.files.length !== 1 ? "s" : ""}
+                          </span>
                         </TableCell>
                         <TableCell className="text-sm">
                           {formatSize(totalSize)}

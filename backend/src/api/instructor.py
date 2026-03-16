@@ -997,6 +997,30 @@ async def delete_analysis_run(run_id: str, user: dict = Depends(_instructor)):
     await db.analysis_runs.delete_one({"_id": run_oid})
 
 
+@router.delete(
+    "/courses/{course_id}/assignments/{assignment_id}/analysis",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_all_analysis_runs(
+    course_id: str,
+    assignment_id: str,
+    user: dict = Depends(_instructor),
+):
+    """Delete all analysis runs for an assignment."""
+    db = get_university_db(user["university_slug"])
+    try:
+        c_oid = ObjectId(course_id)
+        a_oid = ObjectId(assignment_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+
+    course = await db.courses.find_one({"_id": c_oid, "instructor_email": user["sub"]})
+    if not course:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    await db.analysis_runs.delete_many({"course_id": c_oid, "assignment_id": a_oid})
+
+
 # ── Reference Submissions ──────────────────────────────────────────────────
 
 

@@ -26,7 +26,7 @@ function getLineStyle(confidence: string, focused: boolean) {
     HIGH:   { bg: "rgba(255,79,79,0.15)",  bgF: "rgba(255,79,79,0.35)",  border: "#ff4f4f" },
     MEDIUM: { bg: "rgba(245,197,66,0.12)", bgF: "rgba(245,197,66,0.30)", border: "#f5c542" },
     LOW:    { bg: "rgba(91,141,238,0.10)", bgF: "rgba(91,141,238,0.28)", border: "#5b8dee" },
-    FILE:   { bg: "rgba(62,207,142,0.12)", bgF: "rgba(62,207,142,0.30)", border: "#3ecf8e" },
+    FILE:   { bg: "rgba(255,79,79,0.18)",  bgF: "rgba(255,79,79,0.40)",  border: "#ff4f4f" },
   };
   const s = styles[confidence] ?? styles.LOW;
   return {
@@ -156,15 +156,13 @@ function Panel({
   bodyRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const codeLines = React.useMemo(() => stripComments(source, fileName), [source, fileName]);
-  const shortName = fileName.replace(/\\/g, "/").split("/").pop() || fileName;
 
   return (
     <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden">
       <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2">
         <span className="font-semibold">{studentName}</span>
-        <span className="text-primary">{shortName}</span>
       </div>
-      <div ref={bodyRef} className="overflow-auto flex-1" style={{ maxHeight: "calc(100vh - 180px)" }}>
+      <div ref={bodyRef} className="overflow-auto flex-1">
         <table className="font-mono text-[12px] leading-[18px] w-full border-collapse">
           <tbody>
             {codeLines.map(({ ln, text }) => {
@@ -234,7 +232,7 @@ export function CodeDiffViewer({
   );
 
   return (
-    <div className="flex gap-1 w-full">
+    <div className="flex gap-1 w-full h-full">
       <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={leftRef} />
       <Panel studentName={pair.student_2} fileName={activeFile} source={srcB} lineMap={lm2} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={rightRef} />
     </div>

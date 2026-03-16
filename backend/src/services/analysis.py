@@ -182,6 +182,11 @@ async def include_reference_submissions(db, temp_dir: str, slug: str,
 
     for ref in refs:
         zip_path = ref.get("zip_path", "")
+        # Translate stored path to local UPLOAD_DIR (handles VPS vs local mismatch)
+        if not os.path.isfile(zip_path):
+            default_prefix = "/opt/academic-fbi/uploads"
+            if zip_path.startswith(default_prefix) and settings.UPLOAD_DIR != default_prefix:
+                zip_path = settings.UPLOAD_DIR + zip_path[len(default_prefix):]
         logger.warning("  ref zip_path=%s  exists=%s", zip_path, os.path.isfile(zip_path))
         if not os.path.isfile(zip_path):
             continue

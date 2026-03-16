@@ -204,3 +204,6 @@ backend/=2.0.0
 *.pid.lock
 .grunt
 bower_components/
+*.stackdump
+analysis_report_*.json
+c_engine_branch_tmp.py
