@@ -55,6 +55,89 @@ function buildLineMap(
   return map;
 }
 
+/**
+ * Strip all comments from source code (Java, C, C++, Python).
+ * Returns an array of { ln, text } where ln is the original 1-based line
+ * number so that block-highlight lookups still work correctly.
+ */
+function stripComments(source: string, fileName: string): { ln: number; text: string }[] {
+  const ext = fileName.includes(".") ? fileName.substring(fileName.lastIndexOf(".")) : "";
+  const rawLines = source.split("\n");
+  const result: { ln: number; text: string }[] = [];
+  let inBlock = false;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    let line = rawLines[i];
+
+    // ── Inside a block comment ────────────────────────────────────────
+    if (inBlock) {
+      const end = line.indexOf("*/");
+      if (end !== -1) {
+        inBlock = false;
+        const after = line.substring(end + 2);
+        if (after.trim()) {
+          result.push({ ln: i + 1, text: after });
+        }
+      }
+      continue;
+    }
+
+    // ── Block comment start (/* or /**) ───────────────────────────────
+    if ([".java", ".c", ".cpp", ".cc", ".h", ".hpp"].includes(ext)) {
+      const blockIdx = findOutsideString(line, "/*");
+      if (blockIdx !== -1) {
+        const before = line.substring(0, blockIdx).trimEnd();
+        const endIdx = line.indexOf("*/", blockIdx + 2);
+        if (endIdx !== -1) {
+          // Single-line block comment: code /* ... */ more
+          const after = line.substring(endIdx + 2);
+          const combined = (before + " " + after).trimEnd();
+          if (combined.trim()) result.push({ ln: i + 1, text: combined });
+        } else {
+          inBlock = true;
+          if (before.trim()) result.push({ ln: i + 1, text: before });
+        }
+        continue;
+      }
+
+      // Single-line // comment
+      const slashIdx = findOutsideString(line, "//");
+      if (slashIdx !== -1) {
+        const before = line.substring(0, slashIdx).trimEnd();
+        if (!before.trim()) continue; // entire line is comment
+        line = before;
+      }
+    }
+
+    // ── Python # comment ──────────────────────────────────────────────
+    if (ext === ".py") {
+      const hashIdx = findOutsideString(line, "#");
+      if (hashIdx !== -1) {
+        const before = line.substring(0, hashIdx).trimEnd();
+        if (!before.trim()) continue;
+        line = before;
+      }
+    }
+
+    result.push({ ln: i + 1, text: line });
+  }
+
+  return result;
+}
+
+/** Find `needle` in `line` only if it's not inside a string literal. */
+function findOutsideString(line: string, needle: string): number {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i <= line.length - needle.length; i++) {
+    const ch = line[i];
+    if (ch === '"' && !inSingle && (i === 0 || line[i - 1] !== "\\")) inDouble = !inDouble;
+    if (ch === "'" && !inDouble && (i === 0 || line[i - 1] !== "\\")) inSingle = !inSingle;
+    if (!inSingle && !inDouble && line.substring(i, i + needle.length) === needle) return i;
+  }
+  return -1;
+}
+
 function Panel({
   studentName,
   fileName,
@@ -72,22 +155,19 @@ function Panel({
   onLineClick: (blockId: number) => void;
   bodyRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const lines = source.split("\n");
+  const codeLines = React.useMemo(() => stripComments(source, fileName), [source, fileName]);
   const shortName = fileName.replace(/\\/g, "/").split("/").pop() || fileName;
 
   return (
     <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden">
-      {/* Header */}
       <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2">
         <span className="font-semibold">{studentName}</span>
         <span className="text-primary">{shortName}</span>
       </div>
-      {/* Code body */}
       <div ref={bodyRef} className="overflow-auto flex-1" style={{ maxHeight: "calc(100vh - 180px)" }}>
         <table className="font-mono text-[12px] leading-[18px] w-full border-collapse">
           <tbody>
-            {lines.map((line, i) => {
-              const ln = i + 1;
+            {codeLines.map(({ ln, text }) => {
               const info = lineMap.get(ln);
               const focused = info != null && info.blockId === focusedBlockId;
 
@@ -95,7 +175,7 @@ function Panel({
                 return (
                   <tr key={ln}>
                     <td className="text-right pr-2 text-muted-foreground/30 select-none text-[11px] w-10">{ln}</td>
-                    <td className="px-2 whitespace-pre">{line || " "}</td>
+                    <td className="px-2 whitespace-pre">{text || " "}</td>
                   </tr>
                 );
               }
@@ -108,7 +188,7 @@ function Panel({
                   onClick={() => onLineClick(info.blockId)}
                 >
                   <td className="text-right pr-2 text-muted-foreground/40 select-none text-[11px] w-10">{ln}</td>
-                  <td className="px-2 whitespace-pre">{line || " "}</td>
+                  <td className="px-2 whitespace-pre">{text || " "}</td>
                 </tr>
               );
             })}
