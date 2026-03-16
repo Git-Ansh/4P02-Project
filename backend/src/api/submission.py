@@ -12,6 +12,7 @@ from src.config.database import get_university_db, get_main_db
 from src.config.settings import settings
 from src.models.schemas import PublicAssignmentResponse, SubmissionResponse
 from src.services.email import send_submission_receipt
+from src.utils.zip_utils import resolve_nested_zips
 
 router = APIRouter(prefix="/api/public", tags=["Public Submission"])
 
@@ -80,10 +81,18 @@ async def get_assignment_from_token(token: str):
 
 
 ALLOWED_EXTENSIONS = {
-    "c": [".c", ".h"],
-    "cpp": [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx"],
-    "java": [".java"],
-    "python": [".py"],
+    "c": [".c", ".h", ".zip"],
+    "cpp": [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx", ".zip"],
+    "java": [".java", ".zip"],
+    "python": [".py", ".zip"],
+}
+
+# Source-only extensions (no .zip) — used to validate extracted ZIP contents
+_SOURCE_EXTENSIONS = {
+    "c": {".c", ".h"},
+    "cpp": {".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx"},
+    "java": {".java"},
+    "python": {".py"},
 }
 
 
@@ -177,13 +186,43 @@ async def submit_assignment(
     # 5. Save files to disk
     os.makedirs(upload_dir, exist_ok=True)
 
-    file_infos = []
     for f in files:
         content = await f.read()
         file_path = os.path.join(upload_dir, f.filename)
         with open(file_path, "wb") as fp:
             fp.write(content)
-        file_infos.append({"name": f.filename, "size": len(content)})
+
+    # 5b. Extract any uploaded ZIP files in-place (nested ZIPs resolved recursively)
+    resolve_nested_zips(upload_dir)
+
+    # 5c. Validate that extracted contents match the assignment language
+    valid_src_exts = _SOURCE_EXTENSIONS.get(language, set())
+    if valid_src_exts:
+        for root, _, fnames in os.walk(upload_dir):
+            for fname in fnames:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext and ext not in valid_src_exts:
+                    # Clean up and reject
+                    shutil.rmtree(upload_dir, ignore_errors=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f'File "{fname}" (from ZIP) is not allowed for {language}. Allowed: {", ".join(sorted(valid_src_exts))}',
+                    )
+
+    # 5d. Build file_infos from whatever is actually on disk after extraction
+    file_infos = []
+    for root, _, fnames in os.walk(upload_dir):
+        for fname in fnames:
+            full = os.path.join(root, fname)
+            rel = os.path.relpath(full, upload_dir)
+            file_infos.append({"name": rel, "size": os.path.getsize(full)})
+
+    if not file_infos:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid source files found in submission.",
+        )
 
     # 6. Insert submission document
     now = datetime.now(timezone.utc)

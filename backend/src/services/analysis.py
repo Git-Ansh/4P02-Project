@@ -207,7 +207,8 @@ def get_template_folder(slug: str, course_id: str, assignment_id: str) -> str | 
 
 
 async def run_analysis_background(db, run_id: ObjectId, slug: str,
-                                   course_id: ObjectId, assignment_id: ObjectId):
+                                   course_id: ObjectId, assignment_id: ObjectId,
+                                   similarity_threshold: float = 0.15):
     """
     Background task: prepare submissions, run engine, store results.
     """
@@ -220,16 +221,46 @@ async def run_analysis_background(db, run_id: ObjectId, slug: str,
         temp_contents = os.listdir(temp_dir)
         logger.warning("run_analysis_background: temp_dir contains %d files: %s", len(temp_contents), temp_contents)
 
+        # Check if we have any student submissions on disk
+        student_zips = [f for f in temp_contents if f.endswith(".zip") and not f.startswith("_ref_")]
+        ref_zips = [f for f in temp_contents if f.startswith("_ref_")]
+        sub_count = await db.submissions.count_documents(
+            {"assignment_id": assignment_id, "course_id": course_id}
+        )
+        ref_count = await db.reference_submissions.count_documents(
+            {"assignment_id": assignment_id, "course_id": course_id}
+        )
+
+        if ref_count > 0 and not ref_zips:
+            logger.warning(
+                "run_analysis_background: %d reference(s) in DB but 0 loaded — "
+                "reference ZIP files may be missing from disk", ref_count
+            )
+
+        if not student_zips and sub_count > 0:
+            raise RuntimeError(
+                f"No student submission files found on disk ({sub_count} submission(s) "
+                f"in database). Students may need to re-upload their work."
+            )
+
+        if not student_zips and not ref_zips:
+            raise RuntimeError(
+                "No submissions or reference files available to analyze."
+            )
+
         template_folder = get_template_folder(slug, str(course_id), str(assignment_id))
         logger.warning("run_analysis_background: template_folder=%s", template_folder)
 
         # Lazy import — tree-sitter may not be installed
+        from functools import partial
         from src.services.comparison_engine import run_engine
 
         # Run engine in executor (CPU-bound)
         loop = asyncio.get_event_loop()
         report = await loop.run_in_executor(
-            None, run_engine, temp_dir, template_folder
+            None,
+            partial(run_engine, temp_dir, template_folder,
+                    similarity_threshold=similarity_threshold),
         )
 
         await db.analysis_runs.update_one(

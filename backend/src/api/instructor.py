@@ -9,9 +9,10 @@ from bson import ObjectId
 from bson.errors import InvalidId
 import tempfile
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from jose import jwt
+from pydantic import BaseModel, Field
 
 from src.api.deps import require_role
 from src.config.database import get_university_db, get_main_db
@@ -817,6 +818,7 @@ async def send_token_email(
 async def trigger_analysis(
     course_id: str,
     assignment_id: str,
+    similarity_threshold: float = Body(0.15, ge=0.0, le=1.0, embed=True),
     user: dict = Depends(_instructor),
 ):
     c_oid, db, _ = await _get_instructor_course(course_id, user)
@@ -845,6 +847,7 @@ async def trigger_analysis(
         "error": None,
         "started_at": now,
         "completed_at": None,
+        "similarity_threshold": similarity_threshold,
         "report": {},
     }
     result = await db.analysis_runs.insert_one(doc)
@@ -852,7 +855,9 @@ async def trigger_analysis(
 
     slug = user["university_slug"]
     from src.services.analysis import run_analysis_background
-    asyncio.create_task(run_analysis_background(db, run_id, slug, c_oid, a_oid))
+    asyncio.create_task(run_analysis_background(
+        db, run_id, slug, c_oid, a_oid, similarity_threshold
+    ))
 
     return AnalysisRunResponse(id=str(run_id), status="running", started_at=now)
 

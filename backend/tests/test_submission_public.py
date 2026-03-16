@@ -1,6 +1,8 @@
 """Tests for the public submission endpoint."""
 
+import io
 import os
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
@@ -160,3 +162,177 @@ class TestSubmitAssignment:
             files=[("files", ("Main.java", b"class X{}", "text/plain"))],
         )
         assert resp.status_code == 409
+
+
+class TestSubmitZipFiles:
+    async def test_submit_zip_valid(
+        self, client, seed_university, sample_assignment, sample_student
+    ):
+        """Submit a .zip containing valid Java files."""
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("Main.java", "public class Main { void run() {} }")
+            zf.writestr("Helper.java", "public class Helper {}")
+        buf.seek(0)
+
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Jane Student",
+                "student_email": "jane@test.edu",
+                "student_number": "STU001",
+            },
+            files=[("files", ("submission.zip", buf.getvalue(), "application/zip"))],
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        filenames = [f["name"] for f in data["files"]]
+        assert any("Main.java" in n for n in filenames)
+        assert any("Helper.java" in n for n in filenames)
+
+    async def test_submit_zip_nested(
+        self, client, seed_university, sample_assignment, sample_student
+    ):
+        """Submit a ZIP containing another ZIP — should be recursively extracted."""
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+
+        inner_buf = io.BytesIO()
+        with zipfile.ZipFile(inner_buf, "w") as inner:
+            inner.writestr("Nested.java", "public class Nested {}")
+        inner_buf.seek(0)
+
+        outer_buf = io.BytesIO()
+        with zipfile.ZipFile(outer_buf, "w") as outer:
+            outer.writestr("inner.zip", inner_buf.getvalue())
+            outer.writestr("Top.java", "public class Top {}")
+        outer_buf.seek(0)
+
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Jane Student",
+                "student_email": "jane@test.edu",
+                "student_number": "STU001",
+            },
+            files=[("files", ("submission.zip", outer_buf.getvalue(), "application/zip"))],
+        )
+        assert resp.status_code == 200
+        filenames = [f["name"] for f in resp.json()["files"]]
+        assert any("Nested.java" in n for n in filenames)
+        assert any("Top.java" in n for n in filenames)
+
+    async def test_submit_zip_invalid_contents(
+        self, client, seed_university, sample_assignment, sample_student
+    ):
+        """ZIP containing .py for a java assignment → 400."""
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("script.py", "print('hello')")
+        buf.seek(0)
+
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Jane Student",
+                "student_email": "jane@test.edu",
+                "student_number": "STU001",
+            },
+            files=[("files", ("code.zip", buf.getvalue(), "application/zip"))],
+        )
+        assert resp.status_code == 400
+
+    async def test_submit_zip_with_folders(
+        self, client, seed_university, sample_assignment, sample_student
+    ):
+        """ZIP with subdirectory structure → files extracted preserving dirs."""
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("src/main/Main.java", "public class Main {}")
+        buf.seek(0)
+
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Jane Student",
+                "student_email": "jane@test.edu",
+                "student_number": "STU001",
+            },
+            files=[("files", ("project.zip", buf.getvalue(), "application/zip"))],
+        )
+        assert resp.status_code == 200
+        filenames = [f["name"] for f in resp.json()["files"]]
+        assert any("Main.java" in n for n in filenames)
+
+    async def test_submit_mixed_zip_and_source(
+        self, client, seed_university, sample_assignment, sample_student
+    ):
+        """Mix of .zip + raw .java in the same request."""
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("FromZip.java", "public class FromZip {}")
+        buf.seek(0)
+
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Jane Student",
+                "student_email": "jane@test.edu",
+                "student_number": "STU001",
+            },
+            files=[
+                ("files", ("Raw.java", b"public class Raw {}", "text/plain")),
+                ("files", ("extra.zip", buf.getvalue(), "application/zip")),
+            ],
+        )
+        assert resp.status_code == 200
+        filenames = [f["name"] for f in resp.json()["files"]]
+        assert any("Raw.java" in n for n in filenames)
+        assert any("FromZip.java" in n for n in filenames)
+
+    async def test_submit_empty_zip(
+        self, client, seed_university, sample_assignment, sample_student
+    ):
+        """Empty ZIP → 400 (no source files found)."""
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w"):
+            pass  # empty
+        buf.seek(0)
+
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Jane Student",
+                "student_email": "jane@test.edu",
+                "student_number": "STU001",
+            },
+            files=[("files", ("empty.zip", buf.getvalue(), "application/zip"))],
+        )
+        assert resp.status_code == 400

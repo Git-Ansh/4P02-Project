@@ -4,7 +4,8 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Code2, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Code2, Loader2, AlertCircle, CheckCircle2, Archive } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Card,
   CardContent,
@@ -70,11 +71,11 @@ function getLanguageLabel(lang: string | undefined): string {
 }
 
 function getAllowedExts(lang: Language | ""): string[] {
-  if (lang === "c") return [".c", ".h"];
+  if (lang === "c") return [".c", ".h", ".zip"];
   if (lang === "cpp")
-    return [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx"];
-  if (lang === "java") return [".java"];
-  if (lang === "python") return [".py"];
+    return [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx", ".zip"];
+  if (lang === "java") return [".java", ".zip"];
+  if (lang === "python") return [".py", ".zip"];
   return [
     ".c",
     ".h",
@@ -86,6 +87,7 @@ function getAllowedExts(lang: Language | ""): string[] {
     ".hxx",
     ".java",
     ".py",
+    ".zip",
   ];
 }
 
@@ -339,9 +341,12 @@ export default function SubmitPage() {
               {theme?.name || "AcademicFBI"}
             </span>
           </Link>
-          {stage !== "token" && assignment && (
-            <Badge variant="outline">{assignment.course_code}</Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {stage !== "token" && assignment && (
+              <Badge variant="outline">{assignment.course_code}</Badge>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
@@ -563,7 +568,11 @@ export default function SubmitPage() {
                           Drag and drop files here
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          You can select multiple files.
+                          You can select multiple files or a .zip archive.
+                        </div>
+                        <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Archive className="h-3 w-3" />
+                          ZIP files are extracted automatically
                         </div>
                       </div>
                     </div>

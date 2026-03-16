@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   Loader2,
@@ -9,11 +9,6 @@ import {
   Upload,
   Trash2,
   Shield,
-  Users,
-  BarChart3,
-  AlertTriangle,
-  Filter,
-  FileText,
   FileCode,
 } from "lucide-react";
 
@@ -28,9 +23,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api";
-import { StatsCard } from "@/components/analysis/stats-card";
-import { SimilarityHeatmap } from "@/components/analysis/similarity-heatmap";
-import { PairRankingTable } from "@/components/analysis/pair-ranking-table";
+import { AnalysisStatsBar } from "@/components/analysis/analysis-stats-bar";
+import { PairListPanel } from "@/components/analysis/pair-list-panel";
 import type { AnalysisReport, ReferenceSubmission } from "@/lib/types/analysis";
 
 interface CourseInfo {
@@ -47,7 +41,6 @@ interface AssignmentInfo {
 
 export default function AssignmentAnalysisPage() {
   const params = useParams();
-  const router = useRouter();
   const courseId = params.id as string;
   const assignmentId = params.assignmentId as string;
 
@@ -61,6 +54,9 @@ export default function AssignmentAnalysisPage() {
   const [uploading, setUploading] = React.useState(false);
   const [runError, setRunError] = React.useState("");
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Single threshold state (0-100) — used for both display filtering and engine runs
+  const [threshold, setThreshold] = React.useState(15);
 
   // Boilerplate state
   const [boilerplateFiles, setBoilerplateFiles] = React.useState<{ filename: string; size: number }[]>([]);
@@ -147,7 +143,10 @@ export default function AssignmentAnalysisPage() {
     try {
       await apiFetch(
         `/api/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/run`,
-        { method: "POST" },
+        {
+          method: "POST",
+          body: JSON.stringify({ similarity_threshold: threshold / 100 }),
+        },
       );
       await fetchReport();
     } catch (err: unknown) {
@@ -223,12 +222,6 @@ export default function AssignmentAnalysisPage() {
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const handleViewPair = (pairId: string) => {
-    router.push(
-      `/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/${pairId}`,
-    );
   };
 
   if (loading) {
@@ -472,28 +465,21 @@ export default function AssignmentAnalysisPage() {
       {/* Results */}
       {report?.status === "completed" && meta && (
         <>
-          <section className="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
-            <StatsCard title="Total Students" value={meta.total_students} icon={Users} />
-            <StatsCard
-              title="Pairs Evaluated"
-              value={`${meta.candidate_pairs_evaluated} / ${meta.total_pairs_possible}`}
-              icon={BarChart3}
-            />
-            <StatsCard title="Pairs Flagged" value={meta.pairs_flagged} icon={AlertTriangle} />
-            <StatsCard
-              title="Threshold"
-              value={`${Math.round(meta.similarity_threshold * 100)}%`}
-              icon={Filter}
-            />
-            <StatsCard
-              title="Boilerplate Filtered"
-              value={meta.boilerplate_hashes_filtered}
-              icon={FileText}
-            />
-          </section>
+          <AnalysisStatsBar
+            totalStudents={meta.total_students}
+            pairsEvaluated={meta.candidate_pairs_evaluated}
+            pairsFlagged={pairs.filter((p) => p.similarity >= threshold / 100).length}
+            threshold={threshold}
+            onThresholdChange={setThreshold}
+            clearCount={pairs.filter((p) => p.similarity < threshold / 100).length}
+          />
 
-          <SimilarityHeatmap pairs={pairs} onPairClick={handleViewPair} />
-          <PairRankingTable pairs={pairs} onViewPair={handleViewPair} />
+          <PairListPanel
+            pairs={pairs}
+            threshold={threshold / 100}
+            courseId={courseId}
+            assignmentId={assignmentId}
+          />
 
           {references.length > 0 && (
             <Card>
@@ -505,7 +491,7 @@ export default function AssignmentAnalysisPage() {
               <CardContent>
                 <p className="text-xs text-muted-foreground">
                   {references.length} reference set{references.length !== 1 ? "s" : ""}{" "}
-                  included. Reference students appear with <code>_ref_</code> prefix.
+                  included · {meta.boilerplate_hashes_filtered} boilerplate hashes filtered
                 </p>
               </CardContent>
             </Card>

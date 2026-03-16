@@ -1,181 +1,162 @@
 "use client";
 
+/**
+ * Code diff viewer — renders exactly like the codesim_viewer reference.
+ *
+ * Takes a `pair` object and an `activeFile` (one of the file names from
+ * pair.sources[student_1]).  Both panels show the SAME filename — student_1's
+ * version on the left, student_2's on the right.
+ *
+ * Line highlighting comes from `pair.files[studentName][activeFile]` which has
+ * per-student block ranges.  Clicking a highlighted line syncs both panels.
+ */
+
 import * as React from "react";
-import type { MatchBlock } from "@/lib/types/analysis";
+import type { AnalysisPair } from "@/lib/types/analysis";
 
 interface CodeDiffViewerProps {
-  studentA: string;
-  studentB: string;
-  fileA: string;
-  fileB: string;
-  sourceA: string;
-  sourceB: string;
-  blocks: MatchBlock[];
-  confidenceFilter: Set<string>;
+  pair: AnalysisPair;
+  activeFile: string;
   focusedBlockId: number | null;
+  onBlockClick: (blockId: number) => void;
 }
 
-interface LineInfo {
-  blockId: number | null;
-  confidence: "HIGH" | "MEDIUM" | "LOW" | null;
-  isBlockStart: boolean;
-  blockLabel: string | null;
+function getLineStyle(confidence: string, focused: boolean) {
+  const styles: Record<string, { bg: string; bgF: string; border: string }> = {
+    HIGH:   { bg: "rgba(255,79,79,0.15)",  bgF: "rgba(255,79,79,0.35)",  border: "#ff4f4f" },
+    MEDIUM: { bg: "rgba(245,197,66,0.12)", bgF: "rgba(245,197,66,0.30)", border: "#f5c542" },
+    LOW:    { bg: "rgba(91,141,238,0.10)", bgF: "rgba(91,141,238,0.28)", border: "#5b8dee" },
+    FILE:   { bg: "rgba(62,207,142,0.12)", bgF: "rgba(62,207,142,0.30)", border: "#3ecf8e" },
+  };
+  const s = styles[confidence] ?? styles.LOW;
+  return {
+    background: focused ? s.bgF : s.bg,
+    borderLeft: `3px solid ${focused ? s.border : s.border + "50"}`,
+    cursor: "pointer",
+  };
 }
 
 function buildLineMap(
-  lines: string[],
-  blocks: MatchBlock[],
-  side: "a" | "b",
-  file: string,
-  confidenceFilter: Set<string>,
-): Map<number, LineInfo> {
-  const map = new Map<number, LineInfo>();
+  pair: AnalysisPair,
+  studentName: string,
+  fileName: string,
+): Map<number, { blockId: number; confidence: string }> {
+  const map = new Map<number, { blockId: number; confidence: string }>();
+  const fileBlocks = pair.files?.[studentName]?.[fileName];
+  if (!fileBlocks) return map;
 
-  for (const block of blocks) {
-    if (!confidenceFilter.has(block.confidence)) continue;
-    const blockFile = side === "a" ? block.file_a : block.file_b;
-    if (blockFile !== file) continue;
-
-    const start = side === "a" ? block.start_a : block.start_b;
-    const end = side === "a" ? block.end_a : block.end_b;
-
-    for (let i = start; i <= end; i++) {
-      map.set(i, {
-        blockId: block.block_id,
-        confidence: block.confidence,
-        isBlockStart: i === start,
-        blockLabel: i === start ? `Block ${block.block_id} (${block.confidence})` : null,
-      });
+  for (const fb of fileBlocks) {
+    const block = pair.blocks.find((b) => b.block_id === fb.block_id);
+    if (!block) continue;
+    for (let ln = fb.start; ln <= fb.end; ln++) {
+      map.set(ln, { blockId: fb.block_id, confidence: block.confidence });
     }
   }
-
   return map;
 }
 
-function getBlockStyle(confidence: string | null, isFocused: boolean) {
-  const base: React.CSSProperties = {};
-
-  if (confidence === "HIGH") {
-    base.borderLeft = `6px solid #ef4444`;
-    base.backgroundColor = isFocused ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.08)";
-  } else if (confidence === "MEDIUM") {
-    base.borderLeft = `6px solid #f97316`;
-    base.backgroundColor = isFocused ? "rgba(249,115,22,0.15)" : "rgba(249,115,22,0.06)";
-  } else if (confidence === "LOW") {
-    base.borderLeft = `6px solid #eab308`;
-    base.backgroundColor = isFocused ? "rgba(234,179,8,0.15)" : "rgba(234,179,8,0.05)";
-  }
-
-  return base;
-}
-
-function getLabelColor(confidence: string): string {
-  if (confidence === "HIGH") return "text-red-400";
-  if (confidence === "MEDIUM") return "text-orange-400";
-  return "text-yellow-400";
-}
-
-function CodePane({
-  student,
-  file,
+function Panel({
+  studentName,
+  fileName,
   source,
-  blocks,
-  side,
-  confidenceFilter,
+  lineMap,
   focusedBlockId,
+  onLineClick,
+  bodyRef,
 }: {
-  student: string;
-  file: string;
+  studentName: string;
+  fileName: string;
   source: string;
-  blocks: MatchBlock[];
-  side: "a" | "b";
-  confidenceFilter: Set<string>;
+  lineMap: Map<number, { blockId: number; confidence: string }>;
   focusedBlockId: number | null;
+  onLineClick: (blockId: number) => void;
+  bodyRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const lines = source.split("\n");
-  const lineMap = buildLineMap(lines, blocks, side, file, confidenceFilter);
+  const shortName = fileName.replace(/\\/g, "/").split("/").pop() || fileName;
 
   return (
     <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b text-sm font-medium">
-        <span className="text-muted-foreground">Student</span>
-        <span className="font-bold">{student}</span>
-        <span className="text-muted-foreground mx-1">&mdash;</span>
-        <span className="text-primary">{file}</span>
+      {/* Header */}
+      <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2">
+        <span className="font-semibold">{studentName}</span>
+        <span className="text-primary">{shortName}</span>
       </div>
+      {/* Code body */}
+      <div ref={bodyRef} className="overflow-auto flex-1" style={{ maxHeight: "calc(100vh - 180px)" }}>
+        <table className="font-mono text-[12px] leading-[18px] w-full border-collapse">
+          <tbody>
+            {lines.map((line, i) => {
+              const ln = i + 1;
+              const info = lineMap.get(ln);
+              const focused = info != null && info.blockId === focusedBlockId;
 
-      <div className="overflow-auto flex-1" style={{ maxHeight: "70vh" }}>
-        <div className="font-mono text-[13px] leading-5">
-          {lines.map((line, i) => {
-            const lineNum = i + 1;
-            const info = lineMap.get(lineNum);
-            const isFocused = info?.blockId === focusedBlockId && focusedBlockId !== null;
-            const style = info ? getBlockStyle(info.confidence, isFocused) : {};
+              if (!info) {
+                return (
+                  <tr key={ln}>
+                    <td className="text-right pr-2 text-muted-foreground/30 select-none text-[11px] w-10">{ln}</td>
+                    <td className="px-2 whitespace-pre">{line || " "}</td>
+                  </tr>
+                );
+              }
 
-            return (
-              <React.Fragment key={lineNum}>
-                {info?.isBlockStart && info.blockLabel && (
-                  <div
-                    className={`px-2 py-0.5 text-[11px] font-semibold ${getLabelColor(info.confidence || "LOW")} bg-black/20`}
-                    data-block-id={info.blockId}
-                  >
-                    {info.blockLabel}
-                  </div>
-                )}
-                <div
-                  className="grid transition-colors"
-                  style={{
-                    gridTemplateColumns: "48px 1fr",
-                    ...style,
-                  }}
+              return (
+                <tr
+                  key={ln}
+                  data-block={info.blockId}
+                  style={getLineStyle(info.confidence, focused)}
+                  onClick={() => onLineClick(info.blockId)}
                 >
-                  <span className="text-right pr-3 py-px text-muted-foreground/50 select-none bg-muted/30 text-xs leading-5">
-                    {lineNum}
-                  </span>
-                  <span className="px-3 py-px whitespace-pre overflow-x-auto">
-                    {line || " "}
-                  </span>
-                </div>
-              </React.Fragment>
-            );
-          })}
-        </div>
+                  <td className="text-right pr-2 text-muted-foreground/40 select-none text-[11px] w-10">{ln}</td>
+                  <td className="px-2 whitespace-pre">{line || " "}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
 export function CodeDiffViewer({
-  studentA,
-  studentB,
-  fileA,
-  fileB,
-  sourceA,
-  sourceB,
-  blocks,
-  confidenceFilter,
+  pair,
+  activeFile,
   focusedBlockId,
+  onBlockClick,
 }: CodeDiffViewerProps) {
+  const leftRef = React.useRef<HTMLDivElement>(null);
+  const rightRef = React.useRef<HTMLDivElement>(null);
+
+  const lm1 = React.useMemo(() => buildLineMap(pair, pair.student_1, activeFile), [pair, activeFile]);
+  const lm2 = React.useMemo(() => buildLineMap(pair, pair.student_2, activeFile), [pair, activeFile]);
+
+  const srcA = pair.sources?.[pair.student_1]?.[activeFile] ?? "";
+  const srcB = pair.sources?.[pair.student_2]?.[activeFile] ?? "";
+
+  const handleClick = React.useCallback(
+    (blockId: number) => {
+      onBlockClick(blockId);
+
+      // Sync-scroll both panels to the clicked block (~20% from top)
+      for (const ref of [leftRef, rightRef]) {
+        const body = ref.current;
+        if (!body) continue;
+        const row = body.querySelector(`[data-block="${blockId}"]`) as HTMLElement | null;
+        if (!row) continue;
+        const bRect = body.getBoundingClientRect();
+        const rRect = row.getBoundingClientRect();
+        const offset = rRect.top - bRect.top + body.scrollTop - bRect.height * 0.2;
+        body.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
+      }
+    },
+    [onBlockClick],
+  );
+
   return (
-    <div className="flex gap-2 w-full">
-      <CodePane
-        student={studentA}
-        file={fileA}
-        source={sourceA}
-        blocks={blocks}
-        side="a"
-        confidenceFilter={confidenceFilter}
-        focusedBlockId={focusedBlockId}
-      />
-      <CodePane
-        student={studentB}
-        file={fileB}
-        source={sourceB}
-        blocks={blocks}
-        side="b"
-        confidenceFilter={confidenceFilter}
-        focusedBlockId={focusedBlockId}
-      />
+    <div className="flex gap-1 w-full">
+      <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={leftRef} />
+      <Panel studentName={pair.student_2} fileName={activeFile} source={srcB} lineMap={lm2} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={rightRef} />
     </div>
   );
 }

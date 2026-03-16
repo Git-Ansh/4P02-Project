@@ -24,6 +24,7 @@ javalang>=0.13.0
 tree-sitter>=0.21.0
 tree-sitter-java>=0.21.0
 tree-sitter-cpp>=0.21.0
+mmh3>=4.0.0
 
 # Email
 requests>=2.31.0

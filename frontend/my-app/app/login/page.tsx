@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Code2, Loader2, AlertCircle } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,7 +26,7 @@ import {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const universitySlug = searchParams.get("university") || "";
+  const universitySlug = searchParams.get("university") || searchParams.get("slug") || "";
   const preselectedRole = searchParams.get("role") || "";
 
   const [email, setEmail] = React.useState("");
@@ -115,6 +116,9 @@ export default function LoginPage() {
 
   return (
     <div className={`min-h-screen flex flex-col${isUniLogin ? " university-theme" : ""}`} style={themeStyle}>
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">

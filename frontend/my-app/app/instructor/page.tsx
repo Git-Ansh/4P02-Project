@@ -22,6 +22,7 @@ import {
   SeverityDot,
   getSeverityLevel,
 } from "@/components/analysis/severity-badge";
+import { SeverityDonut } from "@/components/analysis/severity-donut";
 import type { InstructorDashboardData, FlaggedPair, RecentAnalysis } from "@/lib/types/analysis";
 
 export default function InstructorDashboard() {
@@ -85,25 +86,15 @@ export default function InstructorDashboard() {
     return true;
   });
 
-  // Donut chart via conic-gradient
-  const total = highCount + medCount + lowCount || 1;
-  const highPct = (highCount / total) * 100;
-  const medPct = (medCount / total) * 100;
-  const donutGradient = `conic-gradient(
-    #ef4444 0% ${highPct}%,
-    #f97316 ${highPct}% ${highPct + medPct}%,
-    #eab308 ${highPct + medPct}% 100%
-  )`;
-
-  // Course health from flagged pairs
-  const courseHealth = new Map<string, { code: string; count: number; id: string }>();
+  // Course health from flagged pairs — track per-severity counts
+  const courseHealth = new Map<string, { code: string; id: string; high: number; med: number; low: number; total: number }>();
   for (const p of flaggedPairs) {
-    const existing = courseHealth.get(p.course_id);
-    if (existing) {
-      existing.count++;
-    } else {
-      courseHealth.set(p.course_id, { code: p.course_code, count: 1, id: p.course_id });
-    }
+    const existing = courseHealth.get(p.course_id) ?? { code: p.course_code, id: p.course_id, high: 0, med: 0, low: 0, total: 0 };
+    if (p.severity_score >= 0.7) existing.high++;
+    else if (p.severity_score >= 0.4) existing.med++;
+    else existing.low++;
+    existing.total++;
+    courseHealth.set(p.course_id, existing);
   }
 
   return (
@@ -156,40 +147,7 @@ export default function InstructorDashboard() {
           icon={AlertTriangle}
           trend={flaggedCount > 0 ? `${flaggedCount} flagged` : undefined}
         />
-        {/* Severity distribution donut */}
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Severity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div
-                className="h-14 w-14 rounded-full shrink-0"
-                style={{
-                  background: flaggedCount > 0 ? donutGradient : "hsl(var(--muted))",
-                  mask: "radial-gradient(circle at center, transparent 55%, black 56%)",
-                  WebkitMask: "radial-gradient(circle at center, transparent 55%, black 56%)",
-                }}
-              />
-              <div className="text-xs space-y-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-red-500" />
-                  {highCount}H
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-orange-500" />
-                  {medCount}M
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-yellow-500" />
-                  {lowCount}L
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <SeverityDonut high={highCount} medium={medCount} low={lowCount} />
       </section>
 
       {/* Row 3: Attention Required */}
@@ -223,9 +181,9 @@ export default function InstructorDashboard() {
             </p>
           ) : (
             <div className="space-y-2">
-              {filteredPairs.slice(0, 5).map((pair) => (
+              {filteredPairs.slice(0, 5).map((pair, idx) => (
                 <Link
-                  key={`${pair.assignment_id}_${pair.pair_id}`}
+                  key={`${pair.assignment_id}_${pair.pair_id}_${idx}`}
                   href={`/instructor/courses/${pair.course_id}/assignments/${pair.assignment_id}/analysis/${pair.pair_id}`}
                   className="flex items-center gap-3 rounded-xl border p-3 hover:bg-muted/50 transition-colors"
                 >
@@ -333,26 +291,46 @@ export default function InstructorDashboard() {
               </p>
             ) : (
               <div className="space-y-2">
-                {Array.from(courseHealth.values()).map((ch) => (
+                {Array.from(courseHealth.values())
+                  .sort((a, b) => b.total - a.total)
+                  .map((ch) => (
                   <div
                     key={ch.id}
-                    className="flex items-center justify-between rounded-xl border p-3"
+                    className="flex items-center gap-3 rounded-xl border p-3"
                   >
-                    <span className="text-sm font-medium">{ch.code}</span>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(ch.count, 5) }).map((_, i) => (
-                        <span key={i} className="h-2 w-2 rounded-full bg-red-500" />
-                      ))}
-                      <span className="text-xs text-muted-foreground ml-1">
-                        {ch.count} flagged
-                      </span>
+                    <span className="text-sm font-medium min-w-[80px]">{ch.code}</span>
+                    <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-muted">
+                      {ch.high > 0 && (
+                        <div
+                          className="bg-red-500 transition-all"
+                          style={{ width: `${(ch.high / ch.total) * 100}%` }}
+                        />
+                      )}
+                      {ch.med > 0 && (
+                        <div
+                          className="bg-orange-500 transition-all"
+                          style={{ width: `${(ch.med / ch.total) * 100}%` }}
+                        />
+                      )}
+                      {ch.low > 0 && (
+                        <div
+                          className="bg-yellow-500 transition-all"
+                          style={{ width: `${(ch.low / ch.total) * 100}%` }}
+                        />
+                      )}
                     </div>
+                    <span className="text-xs text-muted-foreground font-medium w-16 text-right shrink-0">
+                      {ch.total} flagged
+                    </span>
                   </div>
                 ))}
                 {data.course_count > courseHealth.size && (
-                  <p className="text-xs text-muted-foreground text-center pt-1">
-                    {data.course_count - courseHealth.size} course{data.course_count - courseHealth.size !== 1 ? "s" : ""} with no issues
-                  </p>
+                  <div className="flex items-center gap-3 rounded-xl border border-dashed p-3 text-muted-foreground">
+                    <span className="text-sm">
+                      {data.course_count - courseHealth.size} course{data.course_count - courseHealth.size !== 1 ? "s" : ""} with no issues
+                    </span>
+                    <span className="ml-auto text-xs text-green-600 font-medium">Clean</span>
+                  </div>
                 )}
               </div>
             )}
