@@ -596,9 +596,6 @@ def build_idf_weights(inverted_index, total_students):
 
 
 def _compatible_units(fa, fb):
-    if not _same_logical_file(fa["file"], fb["file"]):
-        return False
-
     uta, utb = fa.get("unit_type"), fb.get("unit_type")
 
     if not uta or not utb:
@@ -659,8 +656,8 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
                     }
                 )
 
-    set_a = {f["hash"] for f in fp_a if any(_same_logical_file(f["file"], g["file"]) for g in fp_b)}
-    set_b = {f["hash"] for f in fp_b if any(_same_logical_file(g["file"], f["file"]) for g in fp_a)}
+    set_a = {f["hash"] for f in fp_a}
+    set_b = {f["hash"] for f in fp_b}
     union_hashes = set_a | set_b
     intersection_hashes = set_a & set_b
 
@@ -670,24 +667,7 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
     return score, matches
 
 
-# ---------------------------------------------------------------------------
-# FIX: _reporting_unit_key
-#
-# Original code always preferred LOOP over METHOD. This caused a method whose
-# body is entirely a loop (e.g. printArray) to be split into two blocks:
-#   • a METHOD block for the signature/closing lines
-#   • a LOOP block for the loop body inside it
-#
-# Fix: only use the LOOP key when the loop is NOT fully contained inside a
-# known method on BOTH sides of the match. When the loop is inside a method,
-# promote the match to be bucketed under the METHOD key so everything folds
-# into one unified METHOD block.
-# ---------------------------------------------------------------------------
-
 def _loop_contained_in_method(match):
-    """Return True when loop ranges on both sides are fully inside their
-    respective method ranges, meaning the loop is an implementation detail
-    of the method rather than a standalone structural unit."""
     ls_a = match.get("loop_start_a")
     le_a = match.get("loop_end_a")
     ms_a = match.get("method_start_a")
@@ -698,7 +678,6 @@ def _loop_contained_in_method(match):
     ms_b = match.get("method_start_b")
     me_b = match.get("method_end_b")
 
-    # Need all four anchors on at least one side to make the determination.
     side_a_contained = (
         ls_a is not None and le_a is not None and
         ms_a is not None and me_a is not None and
@@ -710,7 +689,6 @@ def _loop_contained_in_method(match):
         ms_b <= ls_b and le_b <= me_b
     )
 
-    # Both sides must confirm containment for us to promote to METHOD.
     return side_a_contained and side_b_contained
 
 
@@ -728,9 +706,6 @@ def _reporting_unit_key(match):
         match.get("method_start_b") is not None and match.get("method_end_b") is not None
     )
 
-    # Use LOOP key only when the loop is NOT a nested implementation detail of
-    # a method. When the loop is fully inside its enclosing method on both
-    # sides, promote to METHOD so the fingerprints merge into one block.
     if has_loop_a and has_loop_b:
         if not (has_method_a and has_method_b and _loop_contained_in_method(match)):
             return (
@@ -740,7 +715,6 @@ def _reporting_unit_key(match):
                 match["loop_start_b"], match["loop_end_b"],
                 match.get("method_name_a"), match.get("method_name_b"),
             )
-        # Fall through to METHOD key below.
 
     if has_method_a and has_method_b:
         return (
@@ -754,19 +728,7 @@ def _reporting_unit_key(match):
     return None
 
 
-# ---------------------------------------------------------------------------
-# FIX: group_and_merge_matches — absorb nested LOOP blocks into METHOD blocks
-#
-# After grouping by key we may still end up with a separate LOOP block whose
-# line range is completely contained inside an already-present METHOD block
-# for the same file pair. We merge them: the METHOD block expands its hash
-# count and raw match count to include the LOOP's contributions, and the
-# redundant LOOP block is discarded.
-# ---------------------------------------------------------------------------
-
 def _blocks_overlap(method_block, loop_block):
-    """Return True if loop block is fully contained within method block on
-    both sides."""
     return (
         method_block["file_a"] == loop_block["file_a"] and
         method_block["file_b"] == loop_block["file_b"] and
@@ -778,9 +740,6 @@ def _blocks_overlap(method_block, loop_block):
 
 
 def _absorb_nested_loops(merged_blocks):
-    """Merge any LOOP block that is fully contained within a METHOD block for
-    the same file pair into that METHOD block. The METHOD block's hash_count
-    and raw_match_count are expanded; the loop block is removed."""
     method_blocks = [b for b in merged_blocks if b.get("unit_type_a") == "METHOD"]
     loop_blocks = [b for b in merged_blocks if b.get("unit_type_a") == "LOOP"]
     other_blocks = [
@@ -792,16 +751,14 @@ def _absorb_nested_loops(merged_blocks):
     for li, lb in enumerate(loop_blocks):
         for mb in method_blocks:
             if _blocks_overlap(mb, lb):
-                # Merge loop hashes into method block.
                 mb["hash_count"] += lb["hash_count"]
                 mb["raw_match_count"] += lb["raw_match_count"]
-                # Expand method block line range to fully cover the loop.
                 mb["start_a"] = min(mb["start_a"], lb["start_a"])
                 mb["end_a"] = max(mb["end_a"], lb["end_a"])
                 mb["start_b"] = min(mb["start_b"], lb["start_b"])
                 mb["end_b"] = max(mb["end_b"], lb["end_b"])
                 absorbed_indices.add(li)
-                break  # Each loop block absorbed by at most one method block.
+                break
 
     surviving_loops = [lb for li, lb in enumerate(loop_blocks) if li not in absorbed_indices]
     return method_blocks + surviving_loops + other_blocks
@@ -843,7 +800,6 @@ def group_and_merge_matches(matches, min_block_size=3):
             }
         )
 
-    # Absorb any surviving LOOP blocks that are nested inside METHOD blocks.
     merged_blocks = _absorb_nested_loops(merged_blocks)
 
     merged_blocks.sort(key=lambda b: (b["file_a"], b["start_a"], b["file_b"], b["start_b"], b["unit_type_a"]))
@@ -861,6 +817,12 @@ def _method_context_compatible(block):
     uta = block.get("unit_type_a")
     utb = block.get("unit_type_b")
 
+    same_file = _same_logical_file(
+        block.get("file_a", ""), block.get("file_b", "")
+    )
+    if not same_file:
+        return True
+
     if uta == "METHOD" and utb == "METHOD":
         na = block.get("unit_name_a")
         nb = block.get("unit_name_b")
@@ -876,6 +838,8 @@ def _method_context_compatible(block):
 
 
 def _name_score(block):
+    if not _same_logical_file(block.get("file_a", ""), block.get("file_b", "")):
+        return 0.0
     uta = block.get("unit_type_a")
     utb = block.get("unit_type_b")
     if uta == "METHOD" and utb == "METHOD":
@@ -988,9 +952,6 @@ def _select_one_to_one_blocks(blocks):
 def _strong_blocks(merged_blocks):
     strong = []
     for block in merged_blocks:
-        if not _same_logical_file(block["file_a"], block["file_b"]):
-            continue
-
         unit_a = block.get("unit_type_a")
         unit_b = block.get("unit_type_b")
         if unit_a and unit_a != "RAW" and not _is_reportable_unit(unit_a):
@@ -1042,6 +1003,9 @@ def should_flag_pair(score, raw_matches):
     merged_blocks = group_and_merge_matches(raw_matches)
     strong = _strong_blocks(merged_blocks)
 
+    if not strong:
+        return False
+
     if score >= SIMILARITY_THRESHOLD:
         return True
 
@@ -1067,7 +1031,6 @@ def should_flag_pair(score, raw_matches):
 
 def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=None):
 
-    
     merged_blocks = group_and_merge_matches(raw_matches)
     strong = _strong_blocks(merged_blocks)
 
@@ -1076,8 +1039,6 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
         if not selected_blocks:
             fallback = []
             for block in merged_blocks:
-                if not _same_logical_file(block["file_a"], block["file_b"]):
-                    continue
                 unit_a = block.get("unit_type_a")
                 unit_b = block.get("unit_type_b")
                 if unit_a and unit_a != "RAW" and not _is_reportable_unit(unit_a):
@@ -1102,16 +1063,17 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
     high_conf_blocks = 0
     density_sum = 0.0
 
-    # File-level detection — if >= 90% hash overlap, report as one FILE block
     file_level_files = set()
     if fp_a and fp_b:
         for fs in _file_level_similarity(fp_a, fp_b):
             if fs["similarity"] >= FILE_SIMILARITY_THRESHOLD:
                 fname = os.path.basename(fs["file_a"])
                 file_level_files.add(fname)
+                fname_b = os.path.basename(fs["file_b"])
                 matches_for_file = [
                     m for m in raw_matches
                     if os.path.basename(m["file_a"]).lower() == fname.lower()
+                    and os.path.basename(m["file_b"]).lower() == fname_b.lower()
                 ]
                 if matches_for_file:
                     start_a = 1
@@ -1159,20 +1121,34 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
                 })
 
     for block in selected_blocks:
-        # Skip method-level blocks for files already reported as FILE-level
         if os.path.basename(block.get("file_a", "")).lower() in {f.lower() for f in file_level_files}:
             continue
         idx = len(structured_blocks) + 1
         block_length_a, block_length_b, density = _compute_block_density(block)
 
-        short_block = min(block_length_a, block_length_b) <= 8
+        short_len = min(block_length_a, block_length_b)
+        short_block = short_len <= 8
         hash_count = block["hash_count"]
         confidence = "LOW"
-        if density >= (0.45 if short_block else 0.75) and (not short_block or hash_count >= 4):
+        # Three-tier thresholds based on block length:
+        #   short  (<=8 lines):  HIGH>=0.45 + hash>=4, MEDIUM>=0.30
+        #   medium (9-20 lines): HIGH>=0.65,            MEDIUM>=0.45
+        #   long   (21+ lines):  HIGH>=0.75,            MEDIUM>=0.55
+        if short_block:
+            high_thresh, med_thresh = 0.45, 0.30
+            high_hash_ok = hash_count >= 4
+        elif short_len <= 20:
+            high_thresh, med_thresh = 0.65, 0.45
+            high_hash_ok = True
+        else:
+            high_thresh, med_thresh = 0.75, 0.55
+            high_hash_ok = True
+        if density >= high_thresh and high_hash_ok:
             confidence = "HIGH"
             high_conf_blocks += 1
-        elif density >= (0.30 if short_block else 0.60):
+        elif density >= med_thresh:
             confidence = "MEDIUM"
+
         density_sum += density
         total_lines_a += block_length_a
         total_lines_b += block_length_b
@@ -1243,8 +1219,6 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
 
 
 def _file_level_similarity(fp_a, fp_b):
-    """Compute per-file hash overlap between two students."""
-    # Group fingerprints by file
     files_a = {}
     files_b = {}
     for fp in fp_a:
@@ -1254,7 +1228,6 @@ def _file_level_similarity(fp_a, fp_b):
 
     results = []
     for fname in files_a:
-        # match by logical filename
         match_key = next(
             (f for f in files_b if os.path.basename(f).lower() == os.path.basename(fname).lower()),
             None
@@ -1375,7 +1348,7 @@ def run_engine(submissions_folder, template_folder=None, parallel=True, save_for
             "similarity_threshold": SIMILARITY_THRESHOLD,
             "unit_match_threshold": UNIT_MATCH_THRESHOLD,
             "unit_min_hashes": UNIT_MIN_HASHES,
-            "matching_policy": "same-logical-file, exact structural unit matching, semantic call/operator tokens, dynamic tiny-unit thresholds, nested-loop-absorbed-into-method",
+            "matching_policy": "cross-filename detection enabled, same-logical-file gate removed, zero-evidence pairs suppressed",
             "adaptive_k_used": k_map_db,
             "boilerplate_hashes_filtered": len(boilerplate_hashes),
         },
