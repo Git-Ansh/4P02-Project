@@ -9,6 +9,7 @@ from src.services.comparison_engine import (
     adaptive_k,
     build_idf_weights,
     build_inverted_index,
+    candidate_pairs_from_index,
     compare_fingerprints,
     get_parser,
     group_and_merge_matches,
@@ -19,6 +20,7 @@ from src.services.comparison_engine import (
     run_engine,
     process_zip_submission,
     winnow,
+    _lookup_source,
 )
 
 
@@ -224,6 +226,47 @@ class TestIDFWeighting:
         fps = [{"hash": 1, "file": "A.java", "start": 1, "end": 5}]
         score, _ = compare_fingerprints(fps, fps)  # no idf_weights
         assert score == 1.0
+
+
+class TestCandidatePairs:
+    def test_shared_hash_pairs(self):
+        inverted = {
+            100: {"s1", "s2"},
+            200: {"s2", "s3"},
+            300: {"s1"},
+        }
+        pairs = candidate_pairs_from_index(inverted)
+        assert ("s1", "s2") in pairs
+        assert ("s2", "s3") in pairs
+        assert ("s1", "s3") not in pairs  # no shared hash
+
+    def test_no_shared_hashes(self):
+        inverted = {100: {"s1"}, 200: {"s2"}}
+        pairs = candidate_pairs_from_index(inverted)
+        assert len(pairs) == 0
+
+    def test_all_share_hash(self):
+        inverted = {100: {"s1", "s2", "s3"}}
+        pairs = candidate_pairs_from_index(inverted)
+        assert len(pairs) == 3  # C(3,2) = 3
+
+
+class TestLookupSource:
+    def test_exact_match(self):
+        cache = {"s1": {"Main.java": "code"}}
+        assert _lookup_source(cache, "s1", "Main.java") == "code"
+
+    def test_suffix_match(self):
+        cache = {"s1": {"src/Main.java": "code"}}
+        assert _lookup_source(cache, "s1", "Main.java") == "code"
+
+    def test_not_found(self):
+        cache = {"s1": {}}
+        assert _lookup_source(cache, "s1", "Missing.java") == "// File not found"
+
+    def test_missing_student(self):
+        cache = {}
+        assert _lookup_source(cache, "s1", "Main.java") == "// File not found"
 
 
 class TestCompareFingerprints:
@@ -440,7 +483,7 @@ class TestRunEngineWithReferences:
             _make_student_zip(d, "_ref_old1", JAVA_CODE_B)
             _make_student_zip(d, "_ref_old2", JAVA_CODE_A)
 
-            result = run_engine(d)
+            result = run_engine(d, parallel=False)
             meta = result["metadata"]
             assert meta["total_students"] == 1
             assert meta["reference_submissions"] == 2
@@ -450,7 +493,7 @@ class TestRunEngineWithReferences:
     def test_single_student_no_references(self):
         with tempfile.TemporaryDirectory() as d:
             _make_student_zip(d, "student1", JAVA_CODE_A)
-            result = run_engine(d)
+            result = run_engine(d, parallel=False)
             meta = result["metadata"]
             assert meta["total_students"] == 1
             assert meta["reference_submissions"] == 0
@@ -461,7 +504,7 @@ class TestRunEngineWithReferences:
             _make_student_zip(d, "stu1", JAVA_CODE_A)
             _make_student_zip(d, "stu2", JAVA_CODE_B)
             _make_student_zip(d, "_ref_sol", JAVA_CODE_A)
-            result = run_engine(d)
+            result = run_engine(d, parallel=False)
             meta = result["metadata"]
             assert meta["total_students"] == 2
             assert meta["reference_submissions"] == 1
@@ -471,7 +514,7 @@ class TestRunEngineWithReferences:
         with tempfile.TemporaryDirectory() as d:
             _make_student_zip(d, "_ref_a", JAVA_CODE_A)
             _make_student_zip(d, "_ref_b", JAVA_CODE_A)
-            result = run_engine(d)
+            result = run_engine(d, parallel=False)
             meta = result["metadata"]
             assert meta["total_students"] == 0
             assert meta["reference_submissions"] == 2
@@ -482,7 +525,7 @@ class TestRunEngineWithReferences:
         with tempfile.TemporaryDirectory() as d:
             _make_student_zip(d, "stu1", JAVA_CODE_A)
             _make_student_zip(d, "stu2", JAVA_CODE_DIFFERENT)
-            result = run_engine(d)
+            result = run_engine(d, parallel=False)
             for pair in result["pairs"]:
                 assert pair["similarity"] < 0.8
 
@@ -492,8 +535,8 @@ class TestRunEngineWithReferences:
             _make_student_zip(d, "stu1", JAVA_CODE_A)
             _make_student_zip(d, "stu2", JAVA_CODE_B)
 
-            low = run_engine(d, similarity_threshold=0.01)
-            high = run_engine(d, similarity_threshold=0.99)
+            low = run_engine(d, similarity_threshold=0.01, parallel=False)
+            high = run_engine(d, similarity_threshold=0.99, parallel=False)
 
             assert high["metadata"]["pairs_flagged"] <= low["metadata"]["pairs_flagged"]
             assert low["metadata"]["similarity_threshold"] == 0.01

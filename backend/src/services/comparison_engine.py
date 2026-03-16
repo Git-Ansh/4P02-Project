@@ -11,6 +11,7 @@ import os
 import shutil
 import tempfile
 import zipfile
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import mmh3
 from tree_sitter import Language, Parser
@@ -40,7 +41,6 @@ MIN_TOKEN_DIVERSITY = 3
 
 LEXICAL_MAP = {
     "identifier": "ID", "field_identifier": "ID", "type_identifier": "ID",
-    "variable_declarator": "ID",
     "decimal_integer_literal": "NUM", "hex_integer_literal": "NUM",
     "number_literal": "NUM",
     "string_literal": "STR", "character_literal": "STR",
@@ -64,6 +64,7 @@ IGNORE_NODE_TYPES = {
     "compound_statement", "expression_statement",
     "parenthesized_expression", "formal_parameters",
     "argument_list", "declaration", "translation_unit",
+    "variable_declarator",
 }
 
 JAVA_LANG = Language(tree_sitter_java.language())
@@ -247,6 +248,18 @@ def _load_zip_source_cache(zip_path):
     return cache
 
 
+def _lookup_source(source_cache, student_id, internal_path):
+    """Efficient lookup from pre-cached ZIP source data."""
+    student_files = source_cache.get(student_id, {})
+    target = internal_path.replace("\\", "/")
+    if target in student_files:
+        return student_files[target]
+    for cached_path, content in student_files.items():
+        if cached_path.endswith(target):
+            return content
+    return "// File not found"
+
+
 def process_zip_submission(zip_path, extract_root):
     """Unzip one submission, apply adaptive k per file, return fingerprints.
 
@@ -288,6 +301,16 @@ def build_inverted_index(fingerprint_db):
         for fp in fps:
             inverted.setdefault(fp["hash"], set()).add(student_id)
     return inverted
+
+
+def candidate_pairs_from_index(inverted_index):
+    """Return only pairs sharing at least one hash, as sorted (s1, s2) tuples."""
+    candidates = set()
+    for students in inverted_index.values():
+        if len(students) > 1:
+            for pair in itertools.combinations(sorted(students), 2):
+                candidates.add(pair)
+    return candidates
 
 
 def build_idf_weights(inverted_index, total_students):
@@ -426,7 +449,7 @@ def fetch_source_code(submissions_folder, student_id, internal_path):
     return "// File not found"
 
 
-def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
+def build_pair_object(s1, s2, score, raw_matches, source_cache):
     merged_blocks = group_and_merge_matches(raw_matches)
 
     structured_blocks = []
@@ -466,12 +489,12 @@ def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
             "end": block["end_b"],
         })
 
-    # Fetch sources for files that have blocks
+    # Fetch sources for files that have blocks (from pre-cached ZIP data)
     sources = {s1: {}, s2: {}}
     for student in highlight_map:
         for file_name in highlight_map[student]:
-            sources[student][file_name] = fetch_source_code(
-                submissions_folder, student, file_name
+            sources[student][file_name] = _lookup_source(
+                source_cache, student, file_name
             )
 
     # ── Exact-match upgrade ──────────────────────────────────────────────
@@ -560,13 +583,15 @@ def build_pair_object(s1, s2, score, raw_matches, submissions_folder):
 # ── Main engine ───────────────────────────────────────────────────────────────
 
 
-def run_engine(submissions_folder, boilerplate_folder=None, similarity_threshold=0.15):
+def run_engine(submissions_folder, boilerplate_folder=None,
+               similarity_threshold=0.15, parallel=True):
     """Run the plagiarism detection pipeline.
 
     Args:
         submissions_folder: path containing ``{student_id}.zip`` files
         boilerplate_folder: optional path with template files to filter
         similarity_threshold: minimum score to flag a pair (0.0–1.0)
+        parallel: use ProcessPoolExecutor for multi-core fingerprinting
 
     Returns:
         dict with ``metadata`` and ``pairs`` keys.
@@ -575,6 +600,7 @@ def run_engine(submissions_folder, boilerplate_folder=None, similarity_threshold
 
     fingerprint_db: dict[str, list[dict]] = {}
     k_map_db: dict[str, dict[str, int]] = {}
+    source_cache: dict[str, dict[str, str]] = {}
     boilerplate_hashes: set[int] = set()
 
     # Step 0: Process boilerplate with adaptive k
@@ -587,14 +613,27 @@ def run_engine(submissions_folder, boilerplate_folder=None, similarity_threshold
             fps = winnow(hashed)
             boilerplate_hashes.update(fp["hash"] for fp in fps)
 
-    # Step 1: Fingerprint all submissions
+    # Step 1: Fingerprint all submissions (parallel or sequential)
     zip_files = [f for f in os.listdir(submissions_folder) if f.endswith(".zip")]
+    full_paths = [os.path.join(submissions_folder, zf) for zf in zip_files]
 
-    for zf in zip_files:
-        full_path = os.path.join(submissions_folder, zf)
-        s_id, fps, k_map = process_zip_submission(full_path, temp_dir)
-        k_map_db[s_id] = k_map
-        fingerprint_db[s_id] = fps
+    if parallel and len(full_paths) > 1:
+        with ProcessPoolExecutor() as executor:
+            future_to_path = {
+                executor.submit(process_zip_submission, path, temp_dir): path
+                for path in full_paths
+            }
+            for future in as_completed(future_to_path):
+                s_id, fps, k_map = future.result()
+                fingerprint_db[s_id] = fps
+                k_map_db[s_id] = k_map
+                source_cache[s_id] = _load_zip_source_cache(future_to_path[future])
+    else:
+        for path in full_paths:
+            s_id, fps, k_map = process_zip_submission(path, temp_dir)
+            fingerprint_db[s_id] = fps
+            k_map_db[s_id] = k_map
+            source_cache[s_id] = _load_zip_source_cache(path)
 
     # Step 1b: Strip boilerplate hashes before building the IDF index
     if boilerplate_hashes:
@@ -612,24 +651,30 @@ def run_engine(submissions_folder, boilerplate_folder=None, similarity_threshold
     inverted_index = build_inverted_index(fingerprint_db)
     idf_weights = build_idf_weights(inverted_index, len(fingerprint_db))
 
-    # Step 4: Determine pairs — real-vs-real + real-vs-ref (skip ref-vs-ref)
-    pairs_to_check = list(itertools.combinations(real_ids, 2))
-    for r in real_ids:
-        for ref in ref_ids:
-            pairs_to_check.append((r, ref))
+    # Step 4: Candidate pairs from inverted index (only pairs sharing >= 1 hash)
+    # Then filter out ref-vs-ref pairs
+    total_pairs_possible = (
+        len(list(itertools.combinations(real_ids, 2)))
+        + len(real_ids) * len(ref_ids)
+    )
+    all_candidates = candidate_pairs_from_index(inverted_index)
+    real_set = set(real_ids)
+    ref_set = set(ref_ids)
+    pairs_to_check = [
+        (s1, s2) for s1, s2 in all_candidates
+        if not (s1 in ref_set and s2 in ref_set)
+    ]
 
-    # Step 5: Compare pairs with IDF-weighted Jaccard
+    # Step 5: Compare candidate pairs with IDF-weighted Jaccard
     flagged_pairs = []
-    candidate_pairs_evaluated = 0
 
     for s1, s2 in pairs_to_check:
-        candidate_pairs_evaluated += 1
         score, matches = compare_fingerprints(
             fingerprint_db[s1], fingerprint_db[s2], idf_weights
         )
 
         if score >= similarity_threshold:
-            clean_pair = build_pair_object(s1, s2, score, matches, submissions_folder)
+            clean_pair = build_pair_object(s1, s2, score, matches, source_cache)
             flagged_pairs.append(clean_pair)
 
     flagged_pairs.sort(key=lambda x: x["severity_score"], reverse=True)
@@ -639,8 +684,8 @@ def run_engine(submissions_folder, boilerplate_folder=None, similarity_threshold
     return {
         "metadata": {
             "total_students": len(real_ids),
-            "total_pairs_possible": len(pairs_to_check),
-            "candidate_pairs_evaluated": candidate_pairs_evaluated,
+            "total_pairs_possible": total_pairs_possible,
+            "candidate_pairs_evaluated": len(pairs_to_check),
             "pairs_flagged": len(flagged_pairs),
             "similarity_threshold": similarity_threshold,
             "boilerplate_hashes_filtered": len(boilerplate_hashes),
