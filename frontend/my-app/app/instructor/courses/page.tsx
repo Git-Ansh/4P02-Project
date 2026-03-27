@@ -301,6 +301,7 @@ function CourseForm({
             term,
             description: description || null,
           }),
+          
         });
       } else {
         await apiFetch("/api/instructor/courses", {

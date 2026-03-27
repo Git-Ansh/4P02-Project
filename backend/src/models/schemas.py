@@ -137,6 +137,10 @@ class InstructorDashboardStats(BaseModel):
     course_count: int
     total_assignments: int = 0
     total_submissions: int = 0
+    submissions_by_assignment: list[dict] = []
+    flagged_high_count: int = 0
+    flagged_med_count: int = 0
+    flagged_low_count: int = 0
     recent_analyses: list[dict] = []
     flagged_pairs: list[dict] = []
 

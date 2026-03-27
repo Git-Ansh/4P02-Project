@@ -150,17 +150,27 @@ async def dashboard(user: dict = Depends(_instructor)):
     total_assignments = 0
     total_submissions = 0
     assignment_map = {}
+    submissions_by_assignment = []
     if course_ids:
-        total_assignments = await db.assignments.count_documents(
-            {"course_id": {"$in": course_ids}}
-        )
-        total_submissions = await db.submissions.count_documents(
-            {"course_id": {"$in": course_ids}}
-        )
         assignments = await db.assignments.find(
             {"course_id": {"$in": course_ids}}
         ).to_list(length=None)
+        total_assignments = len(assignments)
         assignment_map = {str(a["_id"]): a for a in assignments}
+
+        for a in assignments:
+            aid = a["_id"]
+            cid = str(a.get("course_id", ""))
+            course = course_map.get(cid, {})
+            count = await db.submissions.count_documents({"assignment_id": aid})
+            submissions_by_assignment.append({
+                "assignment_id": str(aid),
+                "course_id": cid,
+                "course_code": course.get("code", ""),
+                "title": a.get("title", "Unknown"),
+                "count": count,
+            })
+        total_submissions = sum(s["count"] for s in submissions_by_assignment)
 
     # Recent analyses
     recent_analyses = []
@@ -176,6 +186,7 @@ async def dashboard(user: dict = Depends(_instructor)):
             report = run.get("report", {})
             pairs = report.get("pairs", [])
             top_sev = max((p.get("severity_score", 0) for p in pairs), default=0)
+            sub_count = await db.submissions.count_documents({"assignment_id": run["assignment_id"]})
             recent_analyses.append({
                 "id": str(run["_id"]),
                 "assignment_id": aid,
@@ -187,14 +198,29 @@ async def dashboard(user: dict = Depends(_instructor)):
                 "top_severity": round(top_sev, 2),
                 "completed_at": run.get("completed_at"),
                 "started_at": run.get("started_at"),
+                "submission_count": sub_count,
             })
 
-    # Flagged pairs across all analyses
+    # Flagged pairs — latest completed run per assignment, across all courses
     flagged_pairs = []
+    flagged_high_count = 0
+    flagged_med_count = 0
+    flagged_low_count = 0
     if course_ids:
         completed_runs = await db.analysis_runs.find(
             {"course_id": {"$in": course_ids}, "status": "completed"}
-        ).sort("completed_at", -1).to_list(length=10)
+        ).sort("completed_at", -1).to_list(length=None)
+
+        # De-duplicate: keep only the most recent run per assignment
+        seen_assignments: set = set()
+        deduped_runs = []
+        for run in completed_runs:
+            aid_key = str(run["assignment_id"])
+            if aid_key not in seen_assignments:
+                seen_assignments.add(aid_key)
+                deduped_runs.append(run)
+        completed_runs = deduped_runs
+
         for run in completed_runs:
             cid = str(run["course_id"])
             aid = str(run["assignment_id"])
@@ -204,27 +230,36 @@ async def dashboard(user: dict = Depends(_instructor)):
             run_pairs = report.get("pairs", [])
             anon = _build_anon_map(run_pairs)
             for idx, pair in enumerate(run_pairs):
-                if pair.get("severity_score", 0) >= 0.3:
-                    s1 = anon.get(pair["student_1"], pair["student_1"])
-                    s2 = anon.get(pair["student_2"], pair["student_2"])
-                    flagged_pairs.append({
-                        "pair_id": f"pair_{idx}",
-                        "assignment_id": aid,
-                        "course_id": cid,
-                        "assignment_title": assignment.get("title", "Unknown"),
-                        "course_code": course.get("code", "Unknown"),
-                        "student_1": s1,
-                        "student_2": s2,
-                        "similarity": pair["similarity"],
-                        "severity_score": pair["severity_score"],
-                    })
+                score = pair.get("severity_score", 0)
+                if score >= 0.7:
+                    flagged_high_count += 1
+                elif score >= 0.4:
+                    flagged_med_count += 1
+                else:
+                    flagged_low_count += 1
+                s1 = anon.get(pair["student_1"], pair["student_1"])
+                s2 = anon.get(pair["student_2"], pair["student_2"])
+                flagged_pairs.append({
+                    "pair_id": f"pair_{idx}",
+                    "assignment_id": aid,
+                    "course_id": cid,
+                    "assignment_title": assignment.get("title", "Unknown"),
+                    "course_code": course.get("code", "Unknown"),
+                    "student_1": s1,
+                    "student_2": s2,
+                    "similarity": pair["similarity"],
+                    "severity_score": score,
+                })
     flagged_pairs.sort(key=lambda x: x["severity_score"], reverse=True)
-    flagged_pairs = flagged_pairs[:20]
 
     return InstructorDashboardStats(
         course_count=course_count,
         total_assignments=total_assignments,
         total_submissions=total_submissions,
+        submissions_by_assignment=submissions_by_assignment,
+        flagged_high_count=flagged_high_count,
+        flagged_med_count=flagged_med_count,
+        flagged_low_count=flagged_low_count,
         recent_analyses=recent_analyses,
         flagged_pairs=flagged_pairs,
     )

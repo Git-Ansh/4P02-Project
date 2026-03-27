@@ -8,12 +8,11 @@ import {
   ClipboardList,
   AlertTriangle,
   FileText,
-  ArrowRight,
-  Shield,
+  TrendingUp,
+  Upload,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 import { StatsCard } from "@/components/analysis/stats-card";
@@ -22,15 +21,20 @@ import {
   SeverityDot,
   getSeverityLevel,
 } from "@/components/analysis/severity-badge";
-import { SeverityDonut } from "@/components/analysis/severity-donut";
-import type { InstructorDashboardData, FlaggedPair, RecentAnalysis } from "@/lib/types/analysis";
+import type {
+  InstructorDashboardData,
+  FlaggedPair,
+  RecentAnalysis,
+} from "@/lib/types/analysis";
 
 export default function InstructorDashboard() {
   const [data, setData] = React.useState<InstructorDashboardData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [name, setName] = React.useState("");
-  const [severityFilter, setSeverityFilter] = React.useState<"ALL" | "HIGH" | "MEDIUM">("ALL");
+  const [severityFilter, setSeverityFilter] = React.useState<
+    "ALL" | "HIGH" | "LOW"
+  >("ALL");
 
   React.useEffect(() => {
     const user = getCurrentUser();
@@ -77,19 +81,40 @@ export default function InstructorDashboard() {
 
   const flaggedCount = flaggedPairs.length;
   const highCount = flaggedPairs.filter((p) => p.severity_score >= 0.7).length;
-  const medCount = flaggedPairs.filter((p) => p.severity_score >= 0.4 && p.severity_score < 0.7).length;
+  const medCount = flaggedPairs.filter(
+    (p) => p.severity_score >= 0.4 && p.severity_score < 0.7
+  ).length;
   const lowCount = flaggedPairs.filter((p) => p.severity_score < 0.4).length;
 
   const filteredPairs = flaggedPairs.filter((p) => {
-    if (severityFilter === "HIGH") return p.severity_score >= 0.7;
-    if (severityFilter === "MEDIUM") return p.severity_score >= 0.4 && p.severity_score < 0.7;
+    if (severityFilter === "HIGH") return p.similarity >= 0.7;
+    if (severityFilter === "LOW") return p.similarity >= 0.4 && p.similarity < 0.7;
     return true;
   });
 
-  // Course health from flagged pairs — track per-severity counts
-  const courseHealth = new Map<string, { code: string; id: string; high: number; med: number; low: number; total: number }>();
+  // Course health — per-severity counts
+  const courseHealth = new Map<
+    string,
+    {
+      code: string;
+      id: string;
+      high: number;
+      med: number;
+      low: number;
+      total: number;
+      totalSubmissions: number;
+    }
+  >();
   for (const p of flaggedPairs) {
-    const existing = courseHealth.get(p.course_id) ?? { code: p.course_code, id: p.course_id, high: 0, med: 0, low: 0, total: 0 };
+    const existing = courseHealth.get(p.course_id) ?? {
+      code: p.course_code,
+      id: p.course_id,
+      high: 0,
+      med: 0,
+      low: 0,
+      total: 0,
+      totalSubmissions: 0,
+    };
     if (p.severity_score >= 0.7) existing.high++;
     else if (p.severity_score >= 0.4) existing.med++;
     else existing.low++;
@@ -97,76 +122,168 @@ export default function InstructorDashboard() {
     courseHealth.set(p.course_id, existing);
   }
 
+  // Derive course health insights
+  const courseHealthInsights = Array.from(courseHealth.values()).map((ch) => {
+    const highPairs = flaggedPairs
+      .filter((p) => p.course_id === ch.id && p.severity_score >= 0.7)
+      .sort((a, b) => b.similarity - a.similarity);
+    const medPairs = flaggedPairs
+      .filter((p) => p.course_id === ch.id && p.severity_score >= 0.4 && p.severity_score < 0.7)
+      .sort((a, b) => b.similarity - a.similarity);
+    return { ch, highPairs, medPairs };
+  });
+
+  const cleanCourses = data.course_count - courseHealth.size;
+
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      {/* Row 1: Welcome Banner */}
-      <section className="rounded-2xl border bg-background p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Welcome{name ? `, ${name}` : ""}
-            </h1>
-            <p className="mt-1 text-muted-foreground">
-              Your academic integrity command center.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild>
-              <Link href="/instructor/courses">
-                View Courses
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/instructor/analysis">View All Analyses</Link>
-            </Button>
-          </div>
-        </div>
+      {/* Row 1: Welcome Banner — full width with light-mode white bg + shadow */}
+      <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 px-4 sm:px-6 lg:px-8 py-5 bg-card shadow-md">
+        <h1 className="text-2xl font-bold tracking-tight">
+          Welcome back{name ? `, ${name}` : ""}
+        </h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Your academic integrity command centre
+        </p>
+      </div>
+
+      {/* Row 2: Stats Cards — 4 columns, Flagged Pairs has severity breakdown */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* My Courses */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardContent className="pt-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  MY COURSES
+                </p>
+                <p className="mt-2 text-4xl font-bold">{data.course_count}</p>
+                {data.course_count === 1 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {/* show first course code if available */}
+                    {Array.from(courseHealth.values())[0]?.code ?? ""} — Active
+                  </p>
+                )}
+              </div>
+              <div className="rounded-lg bg-muted p-2">
+                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Assignments */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardContent className="pt-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  ASSIGNMENTS
+                </p>
+                <p className="mt-2 text-4xl font-bold">
+                  {data.total_assignments}
+                </p>
+                {data.submissions_by_assignment?.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground truncate max-w-[140px]">
+                    {(() => {
+                      const byCourse = new Map<string, { code: string; titles: string[] }>();
+                      for (const a of data.submissions_by_assignment) {
+                        const entry = byCourse.get(a.course_id) ?? { code: a.course_code, titles: [] };
+                        entry.titles.push(a.title);
+                        byCourse.set(a.course_id, entry);
+                      }
+                      return Array.from(byCourse.values())
+                        .map(({ code, titles }) => `${titles.join(" · ")}${code ? ` in ${code}` : ""}`)
+                        .join(" | ");
+                    })()}
+                  </p>
+                )}
+              </div>
+              <div className="rounded-lg bg-muted p-2">
+                <ClipboardList className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Submissions */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardContent className="pt-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  SUBMISSIONS
+                </p>
+                <p className="mt-2 text-4xl font-bold">
+                  {data.total_submissions}
+                </p>
+                {data.submissions_by_assignment?.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {data.submissions_by_assignment
+                      .map((a) => `${a.title} (${a.count})`)
+                      .join(" · ")}
+                  </p>
+                )}
+              </div>
+              <div className="rounded-lg bg-muted p-2">
+                <Upload className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Flagged Pairs — with severity breakdown + donut chart */}
+        <Card className="rounded-2xl shadow-sm border-destructive/40">
+          <CardContent className="pt-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  FLAGGED PAIRS
+                </p>
+                <p className="mt-2 text-4xl font-bold text-destructive">
+                  {data.flagged_high_count + data.flagged_med_count + data.flagged_low_count}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="text-red-500 font-medium">{data.flagged_high_count} High</span>
+                  {" · "}
+                  <span className="text-orange-500 font-medium">{data.flagged_med_count} Medium</span>
+                  {" · "}
+                  <span className="text-yellow-600 font-medium">{data.flagged_low_count} Low</span>
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground/60 uppercase tracking-wide">by severity</p>
+              </div>
+              <DonutChart high={data.flagged_high_count} med={data.flagged_med_count} low={data.flagged_low_count} />
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
-      {/* Row 2: Stats Cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatsCard
-          title="My Courses"
-          value={data.course_count}
-          icon={GraduationCap}
-        />
-        <StatsCard
-          title="Assignments"
-          value={data.total_assignments}
-          icon={ClipboardList}
-        />
-        <StatsCard
-          title="Submissions"
-          value={data.total_submissions}
-          icon={FileText}
-        />
-        <StatsCard
-          title="Flagged Pairs"
-          value={flaggedCount}
-          icon={AlertTriangle}
-          trend={flaggedCount > 0 ? `${flaggedCount} flagged` : undefined}
-        />
-        <SeverityDonut high={highCount} medium={medCount} low={lowCount} />
-      </section>
-
-      {/* Row 3: Attention Required */}
+      {/* Row 3: Similarity Flags */}
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Attention Required</CardTitle>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-lg">Similarity Alerts</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {data.flagged_high_count + data.flagged_med_count + data.flagged_low_count} flagged pairs · click any row to open the analysis
+              </p>
+            </div>
             <div className="flex items-center gap-2">
-              {(["ALL", "HIGH", "MEDIUM"] as const).map((f) => (
+              {(["ALL", "HIGH", "LOW"] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setSeverityFilter(f)}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                     severityFilter === f
-                      ? "bg-primary text-primary-foreground"
+                      ? f === "ALL"
+                        ? "bg-foreground text-background"
+                        : f === "HIGH"
+                          ? "bg-red-500 text-white"
+                          : "bg-orange-400 text-white"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
-                  {f === "ALL" ? "All" : f}
+                  {f === "ALL" ? "All" : f === "HIGH" ? "High" : "Medium"}
                 </button>
               ))}
             </div>
@@ -180,52 +297,71 @@ export default function InstructorDashboard() {
                 : "No pairs match this filter."}
             </p>
           ) : (
-            <div className="space-y-2">
-              {filteredPairs.slice(0, 5).map((pair, idx) => (
-                <Link
-                  key={`${pair.assignment_id}_${pair.pair_id}_${idx}`}
-                  href={`/instructor/courses/${pair.course_id}/assignments/${pair.assignment_id}/analysis/${pair.pair_id}`}
-                  className="flex items-center gap-3 rounded-xl border p-3 hover:bg-muted/50 transition-colors"
-                >
-                  <SeverityDot score={pair.severity_score} />
-                  <span className="font-medium text-sm min-w-[120px]">
-                    {pair.student_1} vs {pair.student_2}
-                  </span>
-                  <div className="flex-1 flex items-center gap-2">
-                    <div className="h-2 w-24 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.round(pair.similarity * 100)}%`,
-                          background:
-                            pair.similarity >= 0.7
-                              ? "#ef4444"
-                              : pair.similarity >= 0.4
-                                ? "#f97316"
-                                : "#eab308",
-                        }}
-                      />
+            <div className="space-y-0">
+              {/* Table header */}
+              <div className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span>Students</span>
+                <span>Course &amp; Assignment</span>
+                <span>Similarity</span>
+                <span>Severity</span>
+                <span>Score</span>
+              </div>
+              <div className={filteredPairs.length > 5 ? "overflow-y-auto max-h-[360px] space-y-0" : "space-y-0"}>
+                {[...filteredPairs].sort((a, b) => b.similarity - a.similarity).map((pair, idx) => (
+                  <Link
+                    key={`${pair.assignment_id}_${pair.pair_id}_${idx}`}
+                    href={`/instructor/courses/${pair.course_id}/assignments/${pair.assignment_id}/analysis/${pair.pair_id}`}
+                    className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 items-center rounded-xl border p-3 hover:bg-muted/50 transition-colors"
+                  >
+                    {/* Students */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <SeverityDot score={pair.severity_score} />
+                      <span className="font-medium text-sm truncate">
+                        {pair.student_1} &amp; {pair.student_2}
+                      </span>
                     </div>
-                    <span className="text-xs font-medium w-10">
-                      {Math.round(pair.similarity * 100)}%
+
+                    {/* Course & Assignment */}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {pair.course_code}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {pair.assignment_title ?? `Assignment`}
+                      </p>
+                    </div>
+
+                    {/* Similarity bar */}
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.round(pair.similarity * 100)}%`,
+                            background:
+                              pair.similarity >= 0.7
+                                ? "#ef4444"
+                                : pair.similarity >= 0.4
+                                  ? "#f97316"
+                                  : "#eab308",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium w-9 shrink-0">
+                        {Math.round(pair.similarity * 100)}%
+                      </span>
+                    </div>
+
+                    {/* Severity */}
+                    <SeverityBadge level={getSeverityLevel(pair.severity_score)} />
+
+                    {/* Score */}
+                    <span className="text-sm font-medium tabular-nums">
+                      {pair.severity_score.toFixed(2)}
                     </span>
-                  </div>
-                  <SeverityBadge level={getSeverityLevel(pair.severity_score)} />
-                  <span className="text-xs text-muted-foreground font-medium w-12 text-right">
-                    {pair.severity_score.toFixed(2)}
-                  </span>
-                </Link>
-              ))}
-              {filteredPairs.length > 5 && (
-                <div className="text-right pt-2">
-                  <Button asChild variant="link" size="sm">
-                    <Link href="/instructor/analysis">
-                      View All
-                      <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              )}
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
@@ -233,9 +369,11 @@ export default function InstructorDashboard() {
 
       {/* Row 4: Recent Analyses + Course Health */}
       <section className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        {/* Recent Analyses */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Recent Analyses</CardTitle>
+            <p className="text-xs text-muted-foreground">Last 7 days</p>
           </CardHeader>
           <CardContent>
             {recentAnalyses.length === 0 ? (
@@ -248,23 +386,25 @@ export default function InstructorDashboard() {
                   <Link
                     key={run.id}
                     href={`/instructor/courses/${run.course_id}/assignments/${run.assignment_id}/analysis`}
-                    className="flex items-center justify-between gap-4 rounded-xl border p-3 hover:bg-muted/50 transition-colors"
+                    className="flex items-center gap-3 rounded-xl border p-3 hover:bg-muted/50 transition-colors"
                   >
-                    <div className="min-w-0">
+                    {/* Icon */}
+                    <div className="rounded-lg bg-muted p-2 shrink-0">
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </div>
+
+                    {/* Title + meta */}
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">
                         {run.assignment_title}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {run.course_code}
+                        {run.course_code} · {run.submission_count ?? data.total_submissions} submissions · token analysis
                       </p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs font-medium">
-                        {run.pairs_flagged} flagged
-                      </span>
-                      {run.top_severity > 0 && (
-                        <SeverityBadge level={getSeverityLevel(run.top_severity)} />
-                      )}
+
+                    {/* Right: time + flagged + severity */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className="text-xs text-muted-foreground">
                         {run.completed_at
                           ? timeAgo(run.completed_at)
@@ -272,6 +412,16 @@ export default function InstructorDashboard() {
                             ? "Running..."
                             : "Failed"}
                       </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-medium">
+                          {run.pairs_flagged} flagged
+                        </span>
+                        {run.top_severity > 0 && (
+                          <SeverityBadge
+                            level={getSeverityLevel(run.top_severity)}
+                          />
+                        )}
+                      </div>
                     </div>
                   </Link>
                 ))}
@@ -280,64 +430,192 @@ export default function InstructorDashboard() {
           </CardContent>
         </Card>
 
+        {/* Course Health */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Course Health</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Similarity distribution across assignments
+            </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             {courseHealth.size === 0 && data.course_count === 0 ? (
               <p className="text-center py-6 text-muted-foreground">
                 No courses yet.
               </p>
             ) : (
-              <div className="space-y-2">
+              <>
                 {Array.from(courseHealth.values())
                   .sort((a, b) => b.total - a.total)
                   .map((ch) => (
-                  <div
-                    key={ch.id}
-                    className="flex items-center gap-3 rounded-xl border p-3"
-                  >
-                    <span className="text-sm font-medium min-w-[80px]">{ch.code}</span>
-                    <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-muted">
-                      {ch.high > 0 && (
-                        <div
-                          className="bg-red-500 transition-all"
-                          style={{ width: `${(ch.high / ch.total) * 100}%` }}
-                        />
-                      )}
-                      {ch.med > 0 && (
-                        <div
-                          className="bg-orange-500 transition-all"
-                          style={{ width: `${(ch.med / ch.total) * 100}%` }}
-                        />
-                      )}
-                      {ch.low > 0 && (
-                        <div
-                          className="bg-yellow-500 transition-all"
-                          style={{ width: `${(ch.low / ch.total) * 100}%` }}
-                        />
-                      )}
+                    <div key={ch.id} className="space-y-2">
+                      {/* Course row */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold">{ch.code}</span>
+                        <span className="text-xs text-destructive font-medium">
+                          {ch.total} flagged
+                        </span>
+                      </div>
+
+                      {/* Stacked bar */}
+                      <div className="flex h-2.5 rounded-full overflow-hidden bg-muted">
+                        {ch.high > 0 && (
+                          <div
+                            className="bg-red-500"
+                            style={{ width: `${(ch.high / ch.total) * 100}%` }}
+                          />
+                        )}
+                        {ch.med > 0 && (
+                          <div
+                            className="bg-orange-400"
+                            style={{ width: `${(ch.med / ch.total) * 100}%` }}
+                          />
+                        )}
+                        {ch.low > 0 && (
+                          <div
+                            className="bg-yellow-400"
+                            style={{ width: `${(ch.low / ch.total) * 100}%` }}
+                          />
+                        )}
+                        {/* Green portion for clean */}
+                        <div className="flex-1 bg-green-400" />
+                      </div>
+
+                      {/* Legend dots */}
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
+                          {ch.high} High
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-orange-400 inline-block" />
+                          {ch.med} Medium
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-yellow-400 inline-block" />
+                          {ch.low} Low
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-green-400 inline-block" />
+                          {Math.max(0, (data.total_submissions ?? 0) - ch.total)} Clean
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground font-medium w-16 text-right shrink-0">
-                      {ch.total} flagged
-                    </span>
+                  ))}
+
+                {/* AI insight banners */}
+                {courseHealthInsights.map(({ ch, highPairs, medPairs }) => (
+                  <div key={`insights-${ch.id}`} className="space-y-2 mt-2">
+                    {ch.high > 0 && (
+                      <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs font-semibold text-red-700 dark:text-red-400">
+                              High risk detected
+                            </p>
+                            <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">
+                              {highPairs.length} pair{highPairs.length !== 1 ? "s" : ""} flagged in {[...new Set(highPairs.map((p) => p.assignment_title))].join(", ")} — pattern suggests collaboration or copying.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {ch.med > 0 && (
+                      <div className="rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+                              Watch
+                            </p>
+                            <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-0.5">
+                              {medPairs.length} pair{medPairs.length !== 1 ? "s" : ""} flagged in {[...new Set(medPairs.map((p) => p.assignment_title))].join(", ")} — medium severity, consistent pattern worth monitoring.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {cleanCourses > 0 || (data.total_submissions ?? 0) - ch.total > 0 ? (
+                      <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="h-4 w-4 rounded-full bg-green-500 flex items-center justify-center mt-0.5 shrink-0">
+                            <span className="text-white text-[8px] font-bold">✓</span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-green-700 dark:text-green-400">
+                              {Math.max(0, (data.total_submissions ?? 0) - ch.total)} submissions clean
+                            </p>
+                            <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
+                              Remaining students show no similarity concerns across either assignment.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
-                {data.course_count > courseHealth.size && (
-                  <div className="flex items-center gap-3 rounded-xl border border-dashed p-3 text-muted-foreground">
+
+                {/* Clean courses with no flags */}
+                {cleanCourses > 0 && courseHealth.size === 0 && (
+                  <div className="rounded-xl border border-dashed p-3 text-muted-foreground">
                     <span className="text-sm">
-                      {data.course_count - courseHealth.size} course{data.course_count - courseHealth.size !== 1 ? "s" : ""} with no issues
+                      {cleanCourses} course{cleanCourses !== 1 ? "s" : ""} with no issues
                     </span>
-                    <span className="ml-auto text-xs text-green-600 font-medium">Clean</span>
+                    <span className="ml-auto float-right text-xs text-green-600 font-medium">
+                      Clean
+                    </span>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
       </section>
     </div>
+  );
+}
+
+function DonutChart({ high, med, low }: { high: number; med: number; low: number }) {
+  const total = high + med + low;
+  const r = 36;
+  const sw = 10;
+  const C = 2 * Math.PI * r;
+
+  if (total === 0) {
+    return (
+      <svg width="88" height="88" viewBox="0 0 88 88">
+        <circle cx="44" cy="44" r={r} fill="none" stroke="#e5e7eb" strokeWidth={sw} />
+      </svg>
+    );
+  }
+
+  const highLen = (high / total) * C;
+  const medLen = (med / total) * C;
+  const lowLen = (low / total) * C;
+
+  // dashoffset positions each segment: offset = C - sum of previous lengths
+  return (
+    <svg width="88" height="88" viewBox="0 0 88 88" style={{ transform: "rotate(-90deg)" }}>
+      {low > 0 && (
+        <circle cx="44" cy="44" r={r} fill="none" stroke="#eab308" strokeWidth={sw}
+          strokeDasharray={`${lowLen} ${C - lowLen}`}
+          strokeDashoffset={C - highLen - medLen}
+        />
+      )}
+      {med > 0 && (
+        <circle cx="44" cy="44" r={r} fill="none" stroke="#f97316" strokeWidth={sw}
+          strokeDasharray={`${medLen} ${C - medLen}`}
+          strokeDashoffset={C - highLen}
+        />
+      )}
+      {high > 0 && (
+        <circle cx="44" cy="44" r={r} fill="none" stroke="#ef4444" strokeWidth={sw}
+          strokeDasharray={`${highLen} ${C - highLen}`}
+          strokeDashoffset={C}
+        />
+      )}
+    </svg>
   );
 }
 
