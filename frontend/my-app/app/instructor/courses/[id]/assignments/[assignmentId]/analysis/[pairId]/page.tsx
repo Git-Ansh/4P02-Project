@@ -155,7 +155,7 @@ export default function PairDetailPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           <div className="py-1">
-            {allPairs.map((p, i) => {
+            {[...allPairs].sort((a, b) => b.similarity - a.similarity).map((p, i) => {
               const isActive = p.pair_id === pair.pair_id;
               const sim = Math.round(p.similarity * 100);
               return (

@@ -83,8 +83,16 @@ export default function InstructorCoursesPage() {
   };
 
   const terms = React.useMemo(() => {
+    const seasonOrder: Record<string, number> = {
+      spring: 1, summer: 2, fall: 3, winter: 4,
+    };
     const set = new Set(courses.map((c) => c.term));
-    return Array.from(set).sort();
+    return Array.from(set).sort((a, b) => {
+      const [aSeason, aYear] = [a.split(" ")[0].toLowerCase(), parseInt(a.split(" ")[1]) || 0];
+      const [bSeason, bYear] = [b.split(" ")[0].toLowerCase(), parseInt(b.split(" ")[1]) || 0];
+      if (bYear !== aYear) return bYear - aYear;
+      return (seasonOrder[aSeason] ?? 5) - (seasonOrder[bSeason] ?? 5);
+    });
   }, [courses]);
 
   const filtered = React.useMemo(() => {

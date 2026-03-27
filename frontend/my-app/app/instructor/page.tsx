@@ -87,6 +87,7 @@ export default function InstructorDashboard() {
   const lowCount = flaggedPairs.filter((p) => p.severity_score < 0.4).length;
 
   const filteredPairs = flaggedPairs.filter((p) => {
+    if (p.similarity < 0.3) return false;
     if (severityFilter === "HIGH") return p.similarity >= 0.7;
     if (severityFilter === "LOW") return p.similarity >= 0.4 && p.similarity < 0.7;
     return true;
@@ -193,8 +194,8 @@ export default function InstructorDashboard() {
                         byCourse.set(a.course_id, entry);
                       }
                       return Array.from(byCourse.values())
-                        .map(({ code, titles }) => `${titles.join(" · ")}${code ? ` in ${code}` : ""}`)
-                        .join(" | ");
+                        .map(({ code, titles }) => `${titles.join(", ")}${code ? ` in ${code}` : ""}`)
+                        .join(", ");
                     })()}
                   </p>
                 )}
@@ -221,7 +222,7 @@ export default function InstructorDashboard() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {data.submissions_by_assignment
                       .map((a) => `${a.title} (${a.count})`)
-                      .join(" · ")}
+                      .join(", ")}
                   </p>
                 )}
               </div>
@@ -264,8 +265,9 @@ export default function InstructorDashboard() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-lg">Similarity Alerts</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Click any row to open analysis</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {data.flagged_high_count + data.flagged_med_count + data.flagged_low_count} flagged pairs · click any row to open the analysis
+                <span className="text-red-500 font-medium">≥70% is High similarity</span>, <span className="text-orange-400 font-medium">40–70% is Medium similarity</span>
               </p>
             </div>
             <div className="flex items-center gap-2">
