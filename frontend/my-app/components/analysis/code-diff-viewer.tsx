@@ -206,11 +206,26 @@ export function CodeDiffViewer({
   const leftRef = React.useRef<HTMLDivElement>(null);
   const rightRef = React.useRef<HTMLDivElement>(null);
 
+  // activeFile is from student_1's perspective. Find student_2's corresponding
+  // file via blocks (cross-filename matching means they can differ).
+  const activeFileB = React.useMemo(() => {
+    // First try same name
+    if (pair.sources?.[pair.student_2]?.[activeFile]) return activeFile;
+    // Look up from blocks: find a block where file_a === activeFile
+    const block = pair.blocks.find((b) => b.file_a === activeFile);
+    if (block?.file_b) return block.file_b;
+    // Look up from files highlight map
+    const s2Files = pair.files?.[pair.student_2] ?? {};
+    const s2Keys = Object.keys(s2Files);
+    if (s2Keys.length === 1) return s2Keys[0];
+    return activeFile;
+  }, [pair, activeFile]);
+
   const lm1 = React.useMemo(() => buildLineMap(pair, pair.student_1, activeFile), [pair, activeFile]);
-  const lm2 = React.useMemo(() => buildLineMap(pair, pair.student_2, activeFile), [pair, activeFile]);
+  const lm2 = React.useMemo(() => buildLineMap(pair, pair.student_2, activeFileB), [pair, activeFileB]);
 
   const srcA = pair.sources?.[pair.student_1]?.[activeFile] ?? "";
-  const srcB = pair.sources?.[pair.student_2]?.[activeFile] ?? "";
+  const srcB = pair.sources?.[pair.student_2]?.[activeFileB] ?? "";
 
   const handleClick = React.useCallback(
     (blockId: number) => {
@@ -234,7 +249,7 @@ export function CodeDiffViewer({
   return (
     <div className="flex gap-1 w-full h-full">
       <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={leftRef} />
-      <Panel studentName={pair.student_2} fileName={activeFile} source={srcB} lineMap={lm2} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={rightRef} />
+      <Panel studentName={pair.student_2} fileName={activeFileB} source={srcB} lineMap={lm2} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={rightRef} />
     </div>
   );
 }

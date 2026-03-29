@@ -94,8 +94,11 @@ export default function PairDetailPage() {
   }
 
   const s1Src = pair.sources?.[pair.student_1] ?? {};
-  const fileList = Object.keys(s1Src);
+  const s2Src = pair.sources?.[pair.student_2] ?? {};
+  // Merge file lists from both students (cross-filename matching means they can differ)
+  const fileList = [...new Set([...Object.keys(s1Src), ...Object.keys(s2Src)])];
   const s1Files = pair.files?.[pair.student_1] ?? {};
+  const s2Files = pair.files?.[pair.student_2] ?? {};
 
   const fileBlocks = (s1Files[activeFile] ?? []) as Array<{ block_id: number; start: number; end: number }>;
   const currentBlocks = fileBlocks
