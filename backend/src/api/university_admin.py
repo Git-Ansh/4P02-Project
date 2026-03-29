@@ -256,5 +256,36 @@ async def list_courses(user: dict = Depends(_admin)):
             "code": d["code"],
             "title": d["title"],
             "term": d.get("term", ""),
+            "instructor_name": d.get("instructor_name", ""),
+            "instructor_email": d.get("instructor_email", ""),
         })
     return result
+
+
+@router.get("/courses/{course_id}/details")
+async def get_course_details(course_id: str, user: dict = Depends(_admin)):
+    oid = _parse_object_id(course_id)
+    db = get_university_db(user["university_slug"])
+
+    student_count = await db.student_records.count_documents({"course_ids": oid})
+
+    assignment_docs = await db.assignments.find({"course_id": oid}).sort("created_at", -1).to_list(length=None)
+
+    assignments = []
+    for a in assignment_docs:
+        a_oid = a["_id"]
+        submission_count = await db.submissions.count_documents({"assignment_id": a_oid})
+        assignments.append({
+            "title": a["title"],
+            "posted_at": a["created_at"].replace(tzinfo=timezone.utc).isoformat() if a.get("created_at") and a["created_at"].tzinfo is None else (a["created_at"].isoformat() if a.get("created_at") else None),
+            "submission_count": submission_count,
+        })
+
+    submission_count = await db.submissions.count_documents({"course_id": oid})
+
+    return {
+        "student_count": student_count,
+        "assignment_count": len(assignments),
+        "submission_count": submission_count,
+        "assignments": assignments,
+    }
