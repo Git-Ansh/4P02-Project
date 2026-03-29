@@ -63,6 +63,7 @@ export interface RecentAnalysis {
   top_severity: number;
   completed_at: string | null;
   started_at: string;
+  submission_count?: number;
 }
 
 export interface FlaggedPair {
@@ -77,10 +78,22 @@ export interface FlaggedPair {
   severity_score: number;
 }
 
+export interface AssignmentSubmissionCount {
+  assignment_id: string;
+  course_id: string;
+  course_code: string;
+  title: string;
+  count: number;
+}
+
 export interface InstructorDashboardData {
   course_count: number;
   total_assignments: number;
   total_submissions: number;
+  submissions_by_assignment: AssignmentSubmissionCount[];
+  flagged_high_count: number;
+  flagged_med_count: number;
+  flagged_low_count: number;
   recent_analyses: RecentAnalysis[];
   flagged_pairs: FlaggedPair[];
 }

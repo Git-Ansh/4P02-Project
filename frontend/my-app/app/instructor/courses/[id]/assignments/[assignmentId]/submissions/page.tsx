@@ -130,6 +130,15 @@ export default function SubmissionsPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      {/* Back to Assignment List */}
+      <Link
+        href={`/instructor/courses/${courseId}`}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 sm:mb-6"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Assignment List
+      </Link>
+
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/instructor/courses" className="hover:text-foreground">
