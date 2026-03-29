@@ -1,7 +1,19 @@
 "use client";
 import * as React from "react";
-import { Users, UserCheck, GraduationCap, Eye, BookOpen, Users2, FileCheck, Mail, Moon } from "lucide-react";
+import { Users, UserCheck, GraduationCap, Eye, BookOpen, Users2, FileCheck, Mail, Moon, ClipboardList, CheckCircle, XCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+
+interface RevealRequest {
+  id: string;
+  instructor_name: string;
+  instructor_email: string;
+  course_code: string;
+  assignment_title: string;
+  assignment_description: string;
+  justification: string;
+  pair_id: string;
+  requested_at: string;
+}
 
 interface AdminStats {
   instructor_count: number;
@@ -49,7 +61,31 @@ export default function AdminDashboard() {
   const [loading, setLoading] = React.useState(true);
   const [instructorGroups, setInstructorGroups] = React.useState<InstructorGroup[]>([]);
   const [showRevealModal, setShowRevealModal] = React.useState(false);
+  const [revealRequests, setRevealRequests] = React.useState<RevealRequest[]>([]);
+  const [revealLoading, setRevealLoading] = React.useState(false);
+  const [resolvingId, setResolvingId] = React.useState<string | null>(null);
   const hour = new Date().getHours();
+
+  const openRevealModal = () => {
+    setShowRevealModal(true);
+    setRevealLoading(true);
+    apiFetch<RevealRequest[]>("/api/admin/reveal-requests")
+      .then(setRevealRequests)
+      .catch(console.error)
+      .finally(() => setRevealLoading(false));
+  };
+
+  const handleResolve = async (id: string, action: "approve" | "decline") => {
+    setResolvingId(id);
+    try {
+      await apiFetch(`/api/admin/reveal-requests/${id}/${action}`, { method: "POST" });
+      setRevealRequests((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setResolvingId(null);
+    }
+  };
 
   React.useEffect(() => {
     apiFetch<AdminStats>("/api/admin/dashboard")
@@ -111,7 +147,7 @@ export default function AdminDashboard() {
           <p className="text-xs text-muted-foreground mt-0.5">University Administration Dashboard</p>
         </div>
         <button
-          onClick={() => setShowRevealModal(true)}
+          onClick={openRevealModal}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow transition-colors"
         >
           <Eye className="h-5 w-5" />
@@ -281,13 +317,76 @@ export default function AdminDashboard() {
     )}
   </div>
 
-      {/*  reveal identity modal */}
       {showRevealModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-100 dark:border-zinc-800">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl p-6 border border-slate-100 dark:border-zinc-800 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Reveal Identity Request</h2>
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-red-600" />
+                <h2 className="text-lg font-semibold">Reveal Identity Requests</h2>
+              </div>
               <button onClick={() => setShowRevealModal(false)} className="text-muted-foreground hover:text-foreground text-2xl leading-none">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {revealLoading ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Loading...</p>
+              ) : revealRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No pending requests.</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {revealRequests.map((req) => (
+                    <div key={req.id} className="rounded-xl border border-slate-200 dark:border-zinc-700 p-4">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                          <p className="font-semibold text-sm">{req.instructor_name}</p>
+                          <p className="text-xs text-muted-foreground">{req.instructor_email}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {new Date(req.requested_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Course</p>
+                          <p className="text-sm font-medium">{req.course_code}</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Assignment</p>
+                          <p className="text-sm font-medium">{req.assignment_title || "—"}</p>
+                        </div>
+                      </div>
+                      {req.assignment_description && (
+                        <div className="mb-3">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Description</p>
+                          <p className="text-xs text-muted-foreground">{req.assignment_description}</p>
+                        </div>
+                      )}
+                      <div className="mb-4">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Justification</p>
+                        <p className="text-sm">{req.justification}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleResolve(req.id, "approve")}
+                          disabled={resolvingId === req.id}
+                          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleResolve(req.id, "decline")}
+                          disabled={resolvingId === req.id}
+                          className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -140,7 +140,7 @@ export default function InstructorDashboard() {
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Row 1: Welcome Banner — full width with light-mode white bg + shadow */}
       <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 px-4 sm:px-6 lg:px-8 py-5 bg-card shadow-md">
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="text-3xl font-bold tracking-tight">
           Welcome back{name ? `, ${name}` : ""}
         </h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
@@ -184,21 +184,7 @@ export default function InstructorDashboard() {
                 <p className="mt-2 text-4xl font-bold">
                   {data.total_assignments}
                 </p>
-                {data.submissions_by_assignment?.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground truncate max-w-[140px]">
-                    {(() => {
-                      const byCourse = new Map<string, { code: string; titles: string[] }>();
-                      for (const a of data.submissions_by_assignment) {
-                        const entry = byCourse.get(a.course_id) ?? { code: a.course_code, titles: [] };
-                        entry.titles.push(a.title);
-                        byCourse.set(a.course_id, entry);
-                      }
-                      return Array.from(byCourse.values())
-                        .map(({ code, titles }) => `${titles.join(", ")}${code ? ` in ${code}` : ""}`)
-                        .join(", ");
-                    })()}
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-muted-foreground">posted across all courses</p>
               </div>
               <div className="rounded-lg bg-muted p-2">
                 <ClipboardList className="h-4 w-4 text-muted-foreground" />
@@ -218,13 +204,7 @@ export default function InstructorDashboard() {
                 <p className="mt-2 text-4xl font-bold">
                   {data.total_submissions}
                 </p>
-                {data.submissions_by_assignment?.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {data.submissions_by_assignment
-                      .map((a) => `${a.title} (${a.count})`)
-                      .join(", ")}
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-muted-foreground">made across all courses</p>
               </div>
               <div className="rounded-lg bg-muted p-2">
                 <Upload className="h-4 w-4 text-muted-foreground" />
@@ -264,7 +244,7 @@ export default function InstructorDashboard() {
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-lg">Similarity Alerts</CardTitle>
+              <CardTitle className="text-2xl">Similarity Alerts</CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">Click any row to open analysis</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 <span className="text-red-500 font-medium">≥70% is High similarity</span>, <span className="text-orange-400 font-medium">40–70% is Medium similarity</span>

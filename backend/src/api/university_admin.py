@@ -289,3 +289,52 @@ async def get_course_details(course_id: str, user: dict = Depends(_admin)):
         "submission_count": submission_count,
         "assignments": assignments,
     }
+
+
+# ── Identity Reveal Requests ────────────────────────────────────────────────
+
+
+@router.get("/reveal-requests")
+async def list_reveal_requests(user: dict = Depends(_admin)):
+    db = get_university_db(user["university_slug"])
+    docs = await db.reveal_requests.find({"status": "pending"}).sort("requested_at", -1).to_list(length=None)
+    result = []
+    for d in docs:
+        result.append({
+            "id": str(d["_id"]),
+            "instructor_name": d.get("instructor_name", ""),
+            "instructor_email": d.get("instructor_email", ""),
+            "course_code": d.get("course_code", ""),
+            "assignment_title": d.get("assignment_title", ""),
+            "assignment_description": d.get("assignment_description", ""),
+            "justification": d.get("justification", ""),
+            "pair_id": d.get("pair_id", ""),
+            "requested_at": d["requested_at"].isoformat() if d.get("requested_at") else None,
+        })
+    return result
+
+
+@router.post("/reveal-requests/{request_id}/approve")
+async def approve_reveal_request(request_id: str, user: dict = Depends(_admin)):
+    oid = _parse_object_id(request_id)
+    db = get_university_db(user["university_slug"])
+    result = await db.reveal_requests.update_one(
+        {"_id": oid, "status": "pending"},
+        {"$set": {"status": "approved", "resolved_at": datetime.now(timezone.utc), "resolved_by": user["sub"]}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found or already resolved")
+    return {"message": "Request approved"}
+
+
+@router.post("/reveal-requests/{request_id}/decline")
+async def decline_reveal_request(request_id: str, user: dict = Depends(_admin)):
+    oid = _parse_object_id(request_id)
+    db = get_university_db(user["university_slug"])
+    result = await db.reveal_requests.update_one(
+        {"_id": oid, "status": "pending"},
+        {"$set": {"status": "denied", "resolved_at": datetime.now(timezone.utc), "resolved_by": user["sub"]}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found or already resolved")
+    return {"message": "Request declined"}
