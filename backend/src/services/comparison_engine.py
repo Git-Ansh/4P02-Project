@@ -388,11 +388,7 @@ def normalize_package(directory_path, student_id):
             collect_structural_spans(tree.root_node, file_spans)
             file_spans.sort(key=_span_sort_key)
 
-            rel_path = os.path.relpath(path, directory_path).replace("\\", "/")
-            # Strip leading wrapper directory (e.g. student_02_submission/MathUtils.java -> MathUtils.java)
-            parts = rel_path.split("/")
-            if len(parts) > 1:
-                rel_path = "/".join(parts[1:])
+            rel_path = os.path.basename(path)
             for tok in file_tokens:
                 tok["file"] = rel_path
                 tok["student"] = student_id
