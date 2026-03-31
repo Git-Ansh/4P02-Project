@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
+import { Header } from "@/components/header";
 
 const privacySections = [
   {
@@ -31,7 +31,7 @@ const privacySections = [
   {
     title: "Changes to this policy",
     content:
-      "We may update this Privacy Policy from time to time. When we do, we will revise the 'last updated' date at the top of this page. We encourage you to review this policy periodically to stay informed about how we protect your information.",
+      "We may update this Privacy Policy from time to time. We encourage you to review this page periodically to stay informed about how we protect your information.",
   },
 ];
 
@@ -82,6 +82,7 @@ export default function LegalPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Header />
 
       {/* Header */}
       <section className="border-b border-border bg-muted/30">
@@ -145,11 +146,6 @@ export default function LegalPage() {
             {activeTab === "privacy" ? "Privacy Policy" : "Terms & Conditions"},
             please contact your institution administrator.
           </p>
-          <div className="flex justify-center mt-4">
-            <Link href="/" className="text-xs text-primary hover:underline">
-              ← Back to home
-            </Link>
-          </div>
         </div>
       </section>
 

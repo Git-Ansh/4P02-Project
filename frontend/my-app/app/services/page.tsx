@@ -6,9 +6,9 @@ import {
   BookOpen,
   BarChart2,
   ShieldCheck,
-  ArrowRight,
 } from "lucide-react";
-import Link from "next/link";
+import { Header } from "@/components/header";
+import { Footer } from "@/components/footer";
 
 const services = [
   {
@@ -58,6 +58,7 @@ const services = [
 export default function ServicesPage() {
   return (
     <div className="min-h-screen bg-background">
+      <Header />
 
       {/* Hero */}
       <section className="border-b border-border bg-muted/30">
@@ -100,34 +101,8 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="border-t border-border bg-muted/30">
-        <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground mb-3">
-            Ready to get started?
-          </h2>
-          <p className="text-sm text-muted-foreground mb-8">
-            Join Academic FBI and simplify how your institution manages courses,
-            students, and instructors.
-          </p>
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 bg-foreground text-background text-sm font-medium px-5 py-2.5 rounded-lg hover:opacity-90 transition-opacity"
-            >
-              Get started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 border border-border text-foreground text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-muted transition-colors"
-            >
-              Back to home
-            </Link>
-          </div>
-        </div>
-      </section>
 
+      <Footer />
     </div>
   );
 }
