@@ -16,12 +16,10 @@ export function Footer() {
             © 2026 Academic FBI. All rights reserved.
           </p>
           <div className="flex gap-6">
-            <Link href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-              Privacy
+            <Link href="/Termcondition" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              Privacy & Terms
             </Link>
-            <Link href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-              Terms
-            </Link>
+
           </div>
         </div>
       </div>
