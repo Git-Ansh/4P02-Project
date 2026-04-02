@@ -1,4 +1,5 @@
 "use client";
+import { TronGridBackground } from "@/components/tron-grid-background"
 import { useState } from "react";
 import { Header } from "@/components/header";
 
@@ -82,6 +83,7 @@ export default function LegalPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <TronGridBackground />
       <Header />
 
       {/* Header */}

@@ -1,4 +1,5 @@
 "use client";
+import { TronGridBackground } from "@/components/tron-grid-background"
 import { useState } from "react";
 import { ShieldCheck, Users, BarChart2, CheckCircle2 } from "lucide-react";
 import { Header } from "@/components/header";
@@ -9,6 +10,7 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <TronGridBackground />
       <Header />
 
       <div className="flex-1 grid lg:grid-cols-2 min-h-[calc(100vh-4rem)]">

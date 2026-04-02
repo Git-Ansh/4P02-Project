@@ -238,10 +238,10 @@ export function UniversityLayout({ navItems, children }: UniversityLayoutProps) 
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="flex min-h-screen university-theme" style={themeStyle}>
-        {/* Desktop sidebar */}
+      <div className="flex h-screen overflow-hidden university-theme" style={themeStyle}>
+        {/* Desktop sidebar — fixed full height, never scrolls */}
         <aside
-          className={`hidden md:flex border-r bg-background flex-col shrink-0 transition-all duration-200 ${
+          className={`hidden md:flex border-r bg-background flex-col shrink-0 h-screen sticky top-0 overflow-hidden transition-all duration-200 ${
             collapsed ? "w-[60px]" : "w-64"
           }`}
         >
@@ -257,9 +257,9 @@ export function UniversityLayout({ navItems, children }: UniversityLayoutProps) 
           />
         </aside>
 
-        {/* Mobile header + sheet */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="md:hidden flex items-center justify-between border-b bg-background px-4 py-3">
+        {/* Mobile header + scrollable main content */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <header className="md:hidden flex items-center justify-between border-b bg-background px-4 py-3 shrink-0">
             <div className="flex items-center gap-2">
               {theme?.logo_url ? (
                 <Image
@@ -297,8 +297,8 @@ export function UniversityLayout({ navItems, children }: UniversityLayoutProps) 
             </Sheet>
           </header>
 
-          {/* Main content */}
-          <main className="flex-1 overflow-auto">{children}</main>
+          {/* Main content — only this area scrolls vertically */}
+          <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
     </TooltipProvider>

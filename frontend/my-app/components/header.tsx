@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Code2, Lock, Menu } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Code2, Menu, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -15,13 +16,19 @@ import {
   NavigationMenuList,
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 
 export function Header() {
+  const pathname = usePathname()
+  const router = useRouter()
+
+  const scrollToGetStarted = () => {
+    if (pathname === "/") {
+      document.getElementById("get-started")?.scrollIntoView({ behavior: "smooth" })
+    } else {
+      router.push("/#get-started")
+    }
+  }
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
@@ -46,14 +53,6 @@ export function Header() {
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink
-                href="/about"
-                className="group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none"
-              >
-                About
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-            <NavigationMenuItem>
-              <NavigationMenuLink
                 href="/services"
                 className="group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none"
               >
@@ -61,7 +60,7 @@ export function Header() {
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <NavigationMenuLink 
+              <NavigationMenuLink
                 href="/contact"
                 className="group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none"
               >
@@ -73,19 +72,11 @@ export function Header() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href="/login">
-                <Button variant="outline" size="icon" className="hidden sm:flex">
-                  <Lock className="h-4 w-4" />
-                </Button>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Sign In</p>
-            </TooltipContent>
-          </Tooltip>
-          
+          <Button size="sm" className="hidden sm:flex text-sm" onClick={scrollToGetStarted}>
+            Get Started
+            <ChevronRight className="ml-1 h-3.5 w-3.5" />
+          </Button>
+
           <ThemeToggle />
 
           {/* Mobile Menu */}
@@ -104,25 +95,20 @@ export function Header() {
               </SheetHeader>
               <Separator className="my-4" />
               <nav className="flex flex-col gap-4">
-                <Link href="#" className="text-lg font-medium hover:text-primary transition-colors">
+                <Link href="/" className="text-lg font-medium hover:text-primary transition-colors">
                   Home
-                </Link>
-                <Link href="/about" className="text-lg font-medium hover:text-primary transition-colors">
-                  About
                 </Link>
                 <Link href="/services" className="text-lg font-medium hover:text-primary transition-colors">
                   Services
                 </Link>
-                <Link href="#" className="text-lg font-medium hover:text-primary transition-colors">
+                <Link href="/contact" className="text-lg font-medium hover:text-primary transition-colors">
                   Contact
                 </Link>
                 <Separator />
-                <Link href="/login">
-                  <Button className="w-full">
-                    <Lock className="mr-2 h-4 w-4" />
-                    Sign In
-                  </Button>
-                </Link>
+                <Button className="w-full" onClick={scrollToGetStarted}>
+                  Get Started
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
               </nav>
             </SheetContent>
           </Sheet>

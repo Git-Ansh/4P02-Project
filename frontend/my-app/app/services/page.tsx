@@ -1,4 +1,5 @@
 "use client";
+import { TronGridBackground } from "@/components/tron-grid-background"
 import {
   GraduationCap,
   Users,
@@ -58,6 +59,7 @@ const services = [
 export default function ServicesPage() {
   return (
     <div className="min-h-screen bg-background">
+      <TronGridBackground />
       <Header />
 
       {/* Hero */}
