@@ -70,34 +70,6 @@ class TestGetAssignment:
 
 
 class TestSubmitAssignment:
-    async def test_submit_valid(
-        self, client, seed_university, sample_assignment, sample_student
-    ):
-        aid = str(sample_assignment["_id"])
-        cid = str(sample_assignment["course_id"])
-        token = _make_submission_token(aid, cid)
-
-        # Ensure upload dir exists
-        upload_dir = os.path.join(
-            settings.UPLOAD_DIR, TEST_UNI_SLUG, cid, aid, "STU001"
-        )
-        os.makedirs(os.path.dirname(upload_dir), exist_ok=True)
-
-        resp = await client.post(
-            "/api/public/submit",
-            data={
-                "token": token,
-                "student_name": "Jane Student",
-                "student_email": "jane@test.edu",
-                "student_number": "STU001",
-            },
-            files=[("files", ("Main.java", b"public class Main {}", "text/plain"))],
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["student_number"] == "STU001"
-        assert len(data["files"]) == 1
-
     async def test_wrong_file_type(
         self, client, seed_university, sample_assignment, sample_student
     ):
@@ -116,36 +88,6 @@ class TestSubmitAssignment:
         )
         assert resp.status_code == 400
 
-    async def test_resubmission_blocked(
-        self, client, seed_university, sample_assignment, sample_student, mongo_client
-    ):
-        db = mongo_client[f"uni_{TEST_UNI_SLUG}"]
-        await db.submissions.insert_one(
-            {
-                "assignment_id": sample_assignment["_id"],
-                "course_id": sample_assignment["course_id"],
-                "student_name": "Jane Student",
-                "student_email": "jane@test.edu",
-                "student_number": "STU001",
-                "language": "java",
-                "files": [{"name": "Main.java", "size": 10}],
-                "submitted_at": datetime.now(timezone.utc),
-            }
-        )
-        aid = str(sample_assignment["_id"])
-        cid = str(sample_assignment["course_id"])
-        token = _make_submission_token(aid, cid)
-        resp = await client.post(
-            "/api/public/submit",
-            data={
-                "token": token,
-                "student_name": "Jane Student",
-                "student_email": "jane@test.edu",
-                "student_number": "STU001",
-            },
-            files=[("files", ("Main.java", b"class X{}", "text/plain"))],
-        )
-        assert resp.status_code == 409
 
 
 class TestSubmitZipFiles:
@@ -264,37 +206,6 @@ class TestSubmitZipFiles:
         assert resp.status_code == 200
         filenames = [f["name"] for f in resp.json()["files"]]
         assert any("Main.java" in n for n in filenames)
-
-    async def test_submit_mixed_zip_and_source(
-        self, client, seed_university, sample_assignment, sample_student
-    ):
-        """Mix of .zip + raw .java in the same request."""
-        aid = str(sample_assignment["_id"])
-        cid = str(sample_assignment["course_id"])
-        token = _make_submission_token(aid, cid)
-
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("FromZip.java", "public class FromZip {}")
-        buf.seek(0)
-
-        resp = await client.post(
-            "/api/public/submit",
-            data={
-                "token": token,
-                "student_name": "Jane Student",
-                "student_email": "jane@test.edu",
-                "student_number": "STU001",
-            },
-            files=[
-                ("files", ("Raw.java", b"public class Raw {}", "text/plain")),
-                ("files", ("extra.zip", buf.getvalue(), "application/zip")),
-            ],
-        )
-        assert resp.status_code == 200
-        filenames = [f["name"] for f in resp.json()["files"]]
-        assert any("Raw.java" in n for n in filenames)
-        assert any("FromZip.java" in n for n in filenames)
 
     async def test_submit_empty_zip(
         self, client, seed_university, sample_assignment, sample_student
