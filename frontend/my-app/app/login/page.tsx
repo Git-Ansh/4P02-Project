@@ -71,7 +71,6 @@ export default function LoginPage() {
         email,
         password,
         university_slug: universitySlug || undefined,
-        role: preselectedRole || undefined,
       });
       console.log("Login response:", { role: data.role, university_slug: data.university_slug });
       console.log("Redirecting to:", getDashboardPath(data.role));

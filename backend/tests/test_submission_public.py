@@ -116,6 +116,22 @@ class TestSubmitAssignment:
         )
         assert resp.status_code == 400
 
+    async def test_not_enrolled(self, client, seed_university, sample_assignment):
+        aid = str(sample_assignment["_id"])
+        cid = str(sample_assignment["course_id"])
+        token = _make_submission_token(aid, cid)
+        resp = await client.post(
+            "/api/public/submit",
+            data={
+                "token": token,
+                "student_name": "Nobody",
+                "student_email": "nobody@test.edu",
+                "student_number": "NOBODY",
+            },
+            files=[("files", ("Main.java", b"class X{}", "text/plain"))],
+        )
+        assert resp.status_code == 403
+
     async def test_resubmission_blocked(
         self, client, seed_university, sample_assignment, sample_student, mongo_client
     ):

@@ -4,12 +4,14 @@ import {
   LayoutDashboard,
   GraduationCap,
   Users,
+  UserCheck,
 } from "lucide-react";
 import { UniversityLayout } from "@/components/university-layout";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/instructors", label: "Instructors", icon: Users },
+  { href: "/admin/students", label: "Students", icon: UserCheck },
   { href: "/admin/courses", label: "Courses", icon: GraduationCap },
 ];
 
