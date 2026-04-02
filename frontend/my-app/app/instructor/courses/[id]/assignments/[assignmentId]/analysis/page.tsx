@@ -74,6 +74,7 @@ export default function AssignmentAnalysisPage() {
   const [boilerplateFiles, setBoilerplateFiles] = React.useState<{ filename: string; size: number }[]>([]);
   const [boilerplateOpen, setBoilerplateOpen] = React.useState(false);
   const [uploadingBoilerplate, setUploadingBoilerplate] = React.useState(false);
+  const [revealApprovals, setRevealApprovals] = React.useState<Record<string, { s1: string; s1number: string; s1email: string; s2: string; s2number: string; s2email: string }>>({});
 
   const fetchReport = React.useCallback(async () => {
     try {
@@ -132,6 +133,14 @@ export default function AssignmentAnalysisPage() {
         // ignore
       }
       await Promise.all([fetchReport(), fetchReferences(), fetchBoilerplate()]);
+      try {
+        const approvals = await apiFetch<Record<string, { s1: string; s1number: string; s1email: string; s2: string; s2number: string; s2email: string }>>(
+          `/api/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/reveal-approvals`,
+        );
+        setRevealApprovals(approvals);
+      } catch {
+        // non-critical
+      }
       setLoading(false);
     }
     load();
@@ -512,6 +521,7 @@ export default function AssignmentAnalysisPage() {
             threshold={threshold / 100}
             courseId={courseId}
             assignmentId={assignmentId}
+            revealApprovals={revealApprovals}
           />
 
           {references.length > 0 && (

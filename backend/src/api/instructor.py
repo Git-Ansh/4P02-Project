@@ -931,6 +931,62 @@ async def get_analysis(
     )
 
 
+# returns all approved reveals for an assignment so the analysis page can show real names in bulk
+@router.get("/courses/{course_id}/assignments/{assignment_id}/analysis/reveal-approvals")
+async def get_reveal_approvals(
+    course_id: str,
+    assignment_id: str,
+    user: dict = Depends(_instructor),
+):
+    c_oid, db, _ = await _get_instructor_course(course_id, user)
+    a_oid = _parse_object_id(assignment_id)
+    docs = await db.reveal_requests.find(
+        {"course_id": c_oid, "assignment_id": a_oid, "instructor_email": user["sub"], "status": "approved"}
+    ).to_list(length=None)
+    result = {}
+    for doc in docs:
+        s1_rec = await db.student_records.find_one({"student_number": doc["real_student_1"]})
+        s2_rec = await db.student_records.find_one({"student_number": doc["real_student_2"]})
+        result[doc["pair_id"]] = {
+            "s1": s1_rec["full_name"] if s1_rec else doc["real_student_1"],
+            "s1number": doc["real_student_1"],
+            "s1email": s1_rec["email"] if s1_rec else "",
+            "s2": s2_rec["full_name"] if s2_rec else doc["real_student_2"],
+            "s2number": doc["real_student_2"],
+            "s2email": s2_rec["email"] if s2_rec else "",
+        }
+    return result
+
+
+# must be before analysis/{pair_id} or FastAPI matches "reveal-status" as pair_id
+@router.get("/courses/{course_id}/assignments/{assignment_id}/analysis/reveal-status")
+async def get_reveal_status(
+    course_id: str,
+    assignment_id: str,
+    pair_id: str,
+    user: dict = Depends(_instructor),
+):
+    c_oid, db, _ = await _get_instructor_course(course_id, user)
+    a_oid = _parse_object_id(assignment_id)
+    req = await db.reveal_requests.find_one(
+        {"course_id": c_oid, "assignment_id": a_oid, "pair_id": pair_id, "instructor_email": user["sub"]},
+        sort=[("requested_at", -1)],
+    )
+    if not req:
+        return {"status": "none"}
+    result = {"status": req["status"]}
+    if req["status"] == "approved":
+        s1_rec = await db.student_records.find_one({"student_number": req["real_student_1"]})
+        s2_rec = await db.student_records.find_one({"student_number": req["real_student_2"]})
+        result["real_student_1"] = s1_rec["full_name"] if s1_rec else req["real_student_1"]
+        result["real_student_1_number"] = req["real_student_1"]
+        result["real_student_1_email"] = s1_rec["email"] if s1_rec else ""
+        result["real_student_2"] = s2_rec["full_name"] if s2_rec else req["real_student_2"]
+        result["real_student_2_number"] = req["real_student_2"]
+        result["real_student_2_email"] = s2_rec["email"] if s2_rec else ""
+    return result
+
+
 @router.get(
     "/courses/{course_id}/assignments/{assignment_id}/analysis/{pair_id}",
 )
@@ -1318,6 +1374,10 @@ async def request_identity_reveal(
     real_1 = original_pair["student_1"]
     real_2 = original_pair["student_2"]
 
+    assignment = await db.assignments.find_one({"_id": a_oid})
+    assignment_title = assignment.get("title", "") if assignment else ""
+    assignment_description = assignment.get("description", "") if assignment else ""
+
     now = datetime.now(timezone.utc)
     doc = {
         "course_id": c_oid,
@@ -1328,6 +1388,8 @@ async def request_identity_reveal(
         "instructor_email": user["sub"],
         "instructor_name": user.get("name", user["sub"]),
         "course_code": course.get("code", ""),
+        "assignment_title": assignment_title,
+        "assignment_description": assignment_description,
         "justification": justification,
         "status": "pending",  # pending | approved | denied
         "requested_at": now,
@@ -1341,3 +1403,5 @@ async def request_identity_reveal(
         "status": "pending",
         "message": "Your request has been submitted to the university administrator for review.",
     }
+
+

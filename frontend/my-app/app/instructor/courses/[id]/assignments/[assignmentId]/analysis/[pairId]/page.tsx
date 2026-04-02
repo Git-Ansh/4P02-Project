@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Eye } from "lucide-react";
+import { Loader2, Eye, Hourglass, CheckCircle2, XCircle } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,9 @@ export default function PairDetailPage() {
   const [justification, setJustification] = React.useState("");
   const [revealSubmitting, setRevealSubmitting] = React.useState(false);
   const [revealResult, setRevealResult] = React.useState<string | null>(null);
+  const [revealStatus, setRevealStatus] = React.useState<"none" | "pending" | "approved" | "denied">("none");
+  const [realNames, setRealNames] = React.useState<{ s1: string; s1number: string; s1email: string; s2: string; s2number: string; s2email: string } | null>(null);
+  const [revealApprovals, setRevealApprovals] = React.useState<Record<string, { s1: string; s2: string }>>({});
 
   React.useEffect(() => {
     async function load() {
@@ -63,9 +66,36 @@ export default function PairDetailPage() {
 
         const files = Object.keys(pairData.sources?.[pairData.student_1] ?? {});
         if (files.length > 0) setActiveFile(files[0]);
+
       } catch (err) {
         setError("Failed to load pair data");
         console.error(err);
+      }
+
+      // check reveal status + all approvals separately so they never crash the whole page
+      try {
+        const [status, approvals] = await Promise.all([
+          apiFetch<{
+            status: string;
+            real_student_1?: string; real_student_1_number?: string; real_student_1_email?: string;
+            real_student_2?: string; real_student_2_number?: string; real_student_2_email?: string;
+          }>(
+            `/api/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/reveal-status?pair_id=${pairId}`,
+          ),
+          apiFetch<Record<string, { s1: string; s2: string }>>(
+            `/api/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/reveal-approvals`,
+          ),
+        ]);
+        setRevealStatus(status.status as typeof revealStatus);
+        if (status.status === "approved" && status.real_student_1 && status.real_student_2) {
+          setRealNames({
+            s1: status.real_student_1, s1number: status.real_student_1_number ?? "", s1email: status.real_student_1_email ?? "",
+            s2: status.real_student_2, s2number: status.real_student_2_number ?? "", s2email: status.real_student_2_email ?? "",
+          });
+        }
+        setRevealApprovals(approvals);
+      } catch {
+        // non-critical, just leave status as "none"
       } finally {
         setLoading(false);
       }
@@ -173,7 +203,9 @@ export default function PairDetailPage() {
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="truncate font-medium">
-                      {p.student_1} vs {p.student_2}
+                      {revealApprovals[p.pair_id]
+                        ? `${revealApprovals[p.pair_id].s1} vs ${revealApprovals[p.pair_id].s2}`
+                        : `${p.student_1} vs ${p.student_2}`}
                     </span>
                     <span className={`shrink-0 font-bold tabular-nums ${getSeverityColor(p.similarity)}`}>
                       {sim}%
@@ -195,9 +227,23 @@ export default function PairDetailPage() {
         <div className="shrink-0 border-b px-4 py-2 space-y-1.5">
           {/* Summary */}
           <div className="flex items-center gap-3 flex-wrap text-sm">
-            <span className="font-semibold">{pair.student_1}</span>
+            {realNames ? (
+              <div className="flex flex-col leading-tight">
+                <span className="font-semibold">{realNames.s1}</span>
+                <span className="text-xs text-muted-foreground">{realNames.s1number}{realNames.s1email ? `, ${realNames.s1email}` : ""}</span>
+              </div>
+            ) : (
+              <span className="font-semibold">{pair.student_1}</span>
+            )}
             <span className="text-muted-foreground text-xs">vs</span>
-            <span className="font-semibold">{pair.student_2}</span>
+            {realNames ? (
+              <div className="flex flex-col leading-tight">
+                <span className="font-semibold">{realNames.s2}</span>
+                <span className="text-xs text-muted-foreground">{realNames.s2number}{realNames.s2email ? `, ${realNames.s2email}` : ""}</span>
+              </div>
+            ) : (
+              <span className="font-semibold">{pair.student_2}</span>
+            )}
             <span className="w-px h-4 bg-border" />
             <span className={`font-bold tabular-nums ${getSeverityColor(pair.similarity)}`}>
               {Math.round(pair.similarity * 100)}%
@@ -207,38 +253,84 @@ export default function PairDetailPage() {
               {pair.summary.total_blocks} blocks ({pair.summary.high_confidence_blocks} high)
             </span>
             <span className="ml-auto" />
-            <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 text-xs">
-                  <Eye className="mr-1.5 h-3 w-3" />
-                  Reveal Identity
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Request Identity Reveal</DialogTitle>
-                  <DialogDescription>
-                    Provide justification for revealing the identities of {pair.student_1} and {pair.student_2}.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  {revealResult ? (
-                    <div className="rounded-lg border bg-muted/50 p-4">
-                      <p className="text-sm">{revealResult}</p>
-                      <Button variant="outline" size="sm" className="mt-3" onClick={() => { setRevealResult(null); setRevealOpen(false); }}>Close</Button>
+            {revealStatus === "approved" ? (
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Identity Revealed
+              </span>
+            ) : revealStatus === "denied" ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-red-500 flex items-center gap-1"><XCircle className="h-3.5 w-3.5" /> Declined by Admin</span>
+                <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" className="h-7 text-base bg-red-600 hover:bg-red-700 text-white">
+                      <Eye className="mr-1.5 h-6 w-6" />
+                      Request Again
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Request Identity Reveal</DialogTitle>
+                      <DialogDescription>
+                        Your previous request was declined. Provide a stronger justification for revealing the identities of {pair.student_1} and {pair.student_2}.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      {revealResult ? (
+                        <div className="rounded-lg border bg-muted/50 p-4">
+                          <p className="text-sm">{revealResult}</p>
+                          <Button variant="outline" size="sm" className="mt-3" onClick={() => { setRevealResult(null); setRevealOpen(false); setRevealStatus("pending"); }}>Close</Button>
+                        </div>
+                      ) : (
+                        <>
+                          <Textarea placeholder="Describe evidence and justification..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={4} />
+                          <Button onClick={handleRevealRequest} disabled={revealSubmitting || !justification.trim()} className="w-full">
+                            {revealSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                            Submit Request
+                          </Button>
+                        </>
+                      )}
                     </div>
-                  ) : (
-                    <>
-                      <Textarea placeholder="Describe evidence and justification..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={4} />
-                      <Button onClick={handleRevealRequest} disabled={revealSubmitting || !justification.trim()} className="w-full">
-                        {revealSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
-                        Submit Request
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            ) : revealStatus === "pending" ? (
+              <span className="text-xs font-medium text-amber-500 flex items-center gap-1">
+                <Hourglass className="h-3.5 w-3.5" /> Request Pending Admin Approval
+              </span>
+            ) : (
+              <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="h-7 text-base bg-red-600 hover:bg-red-700 text-white">
+                    <Eye className="mr-1.5 h-6 w-6" />
+                    Reveal Identity
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Request Identity Reveal</DialogTitle>
+                    <DialogDescription>
+                      Provide justification for revealing the identities of {pair.student_1} and {pair.student_2}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {revealResult ? (
+                      <div className="rounded-lg border bg-muted/50 p-4">
+                        <p className="text-sm">{revealResult}</p>
+                        <Button variant="outline" size="sm" className="mt-3" onClick={() => { setRevealResult(null); setRevealOpen(false); setRevealStatus("pending"); }}>Close</Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Textarea placeholder="Describe evidence and justification..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={4} />
+                        <Button onClick={handleRevealRequest} disabled={revealSubmitting || !justification.trim()} className="w-full">
+                          {revealSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                          Submit Request
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
 
           {/* File tabs + block nav */}

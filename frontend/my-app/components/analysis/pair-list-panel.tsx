@@ -8,11 +8,17 @@ import {
 } from "@/components/analysis/severity-badge";
 import type { AnalysisPair } from "@/lib/types/analysis";
 
+interface RevealedIdentity {
+  s1: string; s1number: string; s1email: string;
+  s2: string; s2number: string; s2email: string;
+}
+
 interface PairListPanelProps {
   pairs: AnalysisPair[];
   threshold: number; // 0-1
   courseId: string;
   assignmentId: string;
+  revealApprovals?: Record<string, RevealedIdentity>;
 }
 
 export function PairListPanel({
@@ -20,6 +26,7 @@ export function PairListPanel({
   threshold,
   courseId,
   assignmentId,
+  revealApprovals = {},
 }: PairListPanelProps) {
   const [severityFilter, setSeverityFilter] = React.useState<
     "ALL" | "HIGH" | "MEDIUM" | "LOW"
@@ -86,6 +93,7 @@ export function PairListPanel({
             const blocks = pair.summary?.total_blocks ?? 0;
             const highBlocks = pair.summary?.high_confidence_blocks ?? 0;
             const density = pair.summary?.average_density ?? 0;
+            const revealed = revealApprovals[pair.pair_id];
 
             return (
               <Link
@@ -97,9 +105,15 @@ export function PairListPanel({
               >
                 {/* Header row */}
                 <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="font-semibold text-sm truncate">
-                    {pair.student_1} vs {pair.student_2}
-                  </span>
+                  {revealed ? (
+                    <div className="flex flex-col leading-tight min-w-0">
+                      <span className="font-semibold text-sm truncate">{revealed.s1} vs {revealed.s2}</span>
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-sm truncate">
+                      {pair.student_1} vs {pair.student_2}
+                    </span>
+                  )}
                   <SeverityBadge
                     level={getSeverityLevel(pair.severity_score)}
                   />
