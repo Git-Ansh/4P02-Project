@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { TronGridBackground } from "@/components/tron-grid-background"
+
 import { getUniversities, University } from "@/lib/api"
 import {
   LockIcon,
@@ -322,7 +322,7 @@ export default function Page() {
   return (
     <div className="min-h-screen flex flex-col">
       <style dangerouslySetInnerHTML={{ __html: pageStyles }} />
-      <TronGridBackground />
+      
       <Header />
       <div className="afbiWrap outfit flex-1"
            style={{ background: "transparent", color: "var(--fg)", overflowX: "hidden", transition: "color .5s" }}>
