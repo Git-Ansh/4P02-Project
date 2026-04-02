@@ -10,6 +10,9 @@ import {
   FileText,
   TrendingUp,
   Upload,
+  Zap,
+  Play,
+  Check,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +39,42 @@ export default function InstructorDashboard() {
   const [severityFilter, setSeverityFilter] = React.useState<
     "ALL" | "HIGH" | "LOW"
   >("ALL");
+
+  // Quick-launch analysis
+  const [qlOpen, setQlOpen] = React.useState(false);
+  const [qlAssignments, setQlAssignments] = React.useState<{ id: string; title: string; course_id: string; course_code: string }[]>([]);
+  const [qlLoading, setQlLoading] = React.useState(false);
+  const [qlRunning, setQlRunning] = React.useState<string | null>(null);
+  const [qlDone, setQlDone] = React.useState<Set<string>>(new Set());
+
+  const loadAssignments = async () => {
+    if (qlAssignments.length > 0) return;
+    setQlLoading(true);
+    try {
+      const courses = await apiFetch<{ id: string; code: string }[]>("/api/instructor/courses");
+      const all: typeof qlAssignments = [];
+      for (const c of courses) {
+        const assignments = await apiFetch<{ id: string; title: string }[]>(`/api/instructor/courses/${c.id}/assignments`);
+        for (const a of assignments) {
+          all.push({ id: a.id, title: a.title, course_id: c.id, course_code: c.code });
+        }
+      }
+      setQlAssignments(all);
+    } catch { /* ignore */ }
+    setQlLoading(false);
+  };
+
+  const runQuickAnalysis = async (courseId: string, assignmentId: string) => {
+    setQlRunning(assignmentId);
+    try {
+      await apiFetch(
+        `/api/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/run`,
+        { method: "POST", body: JSON.stringify({ similarity_threshold: 0.15 }) },
+      );
+      setQlDone(prev => new Set(prev).add(assignmentId));
+    } catch { /* ignore */ }
+    setQlRunning(null);
+  };
 
   React.useEffect(() => {
     const user = getCurrentUser();
@@ -151,9 +190,58 @@ export default function InstructorDashboard() {
               Welcome back{name ? `, ${name}` : ""}
             </h1>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-[10px] font-jb text-muted-foreground/50 tracking-wider uppercase">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
-            {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+          <div className="hidden sm:flex items-center gap-3">
+            <div className="relative">
+              <button
+                onClick={() => { setQlOpen(!qlOpen); loadAssignments(); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-jb uppercase tracking-wider transition-all border border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/50"
+              >
+                <Zap className="h-3 w-3" />
+                Quick Run
+              </button>
+              {qlOpen && (
+                <div className="absolute right-0 top-full mt-2 w-72 rounded-lg border bg-card shadow-lg z-50 overflow-hidden">
+                  <div className="px-3 py-2 border-b text-[10px] font-jb uppercase tracking-wider text-muted-foreground">
+                    Select Assignment
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {qlLoading ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : qlAssignments.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No assignments found</p>
+                    ) : (
+                      qlAssignments.map(a => (
+                        <div key={a.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{a.title}</p>
+                            <p className="text-[10px] text-muted-foreground font-jb">{a.course_code}</p>
+                          </div>
+                          <button
+                            disabled={qlRunning === a.id || qlDone.has(a.id)}
+                            onClick={() => runQuickAnalysis(a.course_id, a.id)}
+                            className="shrink-0 ml-2 p-1.5 rounded-md transition-all disabled:opacity-50 hover:bg-primary/10 text-primary"
+                          >
+                            {qlDone.has(a.id) ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            ) : qlRunning === a.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-jb text-muted-foreground/50 tracking-wider uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
+              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+            </div>
           </div>
         </div>
       </div>

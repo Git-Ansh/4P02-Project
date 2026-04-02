@@ -137,14 +137,17 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950">
-      <div className="bg-white dark:bg-zinc-900 border-b px-6 lg:px-10 py-4 flex items-center justify-between shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            {getGreeting()}
-            {(hour >= 21 || hour < 5) && <Moon className="h-6 w-6 text-indigo-400" />}
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">University Administration Dashboard</p>
+    <div className="min-h-screen bg-background hud-grid">
+      <div className="border-b border-border/50 px-6 lg:px-10 py-6 flex items-center justify-between" style={{ background: "linear-gradient(180deg, hsl(var(--card) / 0.5) 0%, transparent 100%)" }}>
+        <div className="flex items-center gap-4">
+          <span className="pulse-dot shrink-0" />
+          <div>
+            <p className="text-[10px] font-jb uppercase tracking-[0.2em] text-primary/70 mb-1">Admin Console</p>
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+              {getGreeting()}
+              {(hour >= 21 || hour < 5) && <Moon className="h-6 w-6 text-indigo-400" />}
+            </h1>
+          </div>
         </div>
         <button
           onClick={openRevealModal}
@@ -156,39 +159,39 @@ export default function AdminDashboard() {
       </div>
       <div className="px-6 lg:px-10 py-8 flex flex-col gap-8">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 p-5 shadow-sm">
+          <div className="rounded-xl glass glow-hover accent-line card-stagger p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Instructors</p>
-                <p className="text-4xl font-bold mt-1">{loading ? "—" : (stats?.instructor_count ?? "-")}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Total Instructors</p>
+                <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.instructor_count ?? "-")}</p>
               </div>
 
-              <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-2.5">
-                <Users className="h-6 w-6 text-slate-600 dark:text-slate-300" />
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-2.5">
+                <Users className="h-5 w-5 text-primary" />
               </div>
             </div>
           </div>
-          <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 p-5 shadow-sm">
+          <div className="rounded-xl glass glow-hover accent-line card-stagger p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Student Records</p>
-                <p className="text-4xl font-bold mt-1">{loading ? "—" : (stats?.student_record_count ?? "-")}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Student Records</p>
+                <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.student_record_count ?? "-")}</p>
               </div>
 
-              <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-2.5">
-                <UserCheck className="h-6 w-6 text-slate-600 dark:text-slate-300" />
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-2.5">
+                <UserCheck className="h-5 w-5 text-primary" />
               </div>
             </div>
           </div>
 
-      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 p-5 shadow-sm">
+      <div className="rounded-xl glass glow-hover accent-line card-stagger p-5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Active Courses</p>
-              <p className="text-4xl font-bold mt-1">{loading ? "—" : (stats?.course_count ?? "-")}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Active Courses</p>
+              <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.course_count ?? "-")}</p>
               </div>
-            <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-2.5">
-              <GraduationCap className="h-6 w-6 text-slate-600 dark:text-slate-300" />
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-2.5">
+              <GraduationCap className="h-5 w-5 text-primary" />
             </div>
           </div>
         </div>
@@ -196,7 +199,7 @@ export default function AdminDashboard() {
 
     {instructorGroups.length > 0 && (
         <div>
-          <div className="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 shadow-md rounded-xl px-5 py-3 mb-5">
+          <div className="bg-card border border-border/50 shadow-md rounded-xl px-5 py-3 mb-5">
             <h2 className="text-xl font-bold">Instructors & Courses</h2>
             <p className="text-sm text-muted-foreground mt-0.5">Overview of all instructors and their assigned courses</p>
           </div>
@@ -209,10 +212,10 @@ export default function AdminDashboard() {
       return (
 
       <div key={group.email} className="flex gap-5 items-stretch">
-        <div className="flex-shrink-0 rounded-2xl overflow-hidden shadow-md bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-700" style={{ width: "320px" }}>
-          <div className="h-20 bg-gradient-to-r from-red-600 to-rose-500 dark:bg-none dark:bg-zinc-800 relative">
+        <div className="flex-shrink-0 rounded-2xl overflow-hidden shadow-md bg-card border border-slate-100 dark:border-zinc-700" style={{ width: "320px" }}>
+          <div className="h-20 bg-gradient-to-r from-red-600 to-rose-500 dark:from-primary/30 dark:to-primary/10 relative">
             <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
-              <div className="w-16 h-16 rounded-full bg-white dark:bg-zinc-700 flex items-center justify-center ring-4 ring-white dark:ring-zinc-800 shadow-xl">
+              <div className="w-16 h-16 rounded-full bg-card flex items-center justify-center ring-4 ring-card shadow-xl">
                 <span className="text-xl font-bold text-red-600 dark:text-white">{getInitials(group.name || "?")}</span>
               </div>
             </div>
@@ -225,24 +228,24 @@ export default function AdminDashboard() {
             <span className="truncate max-w-[180px]">{group.email}</span>
           </div>
 
-          <div className="w-full mt-4 grid grid-cols-3 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800">
+          <div className="w-full mt-4 grid grid-cols-3 rounded-xl overflow-hidden border border-border/50 bg-muted">
             <div className="flex flex-col items-center py-3">
               <span className="text-base font-bold">{group.courses.length}</span>
                 <span className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">Courses</span>
           </div>
 
-          <div className="flex flex-col items-center py-3 border-l border-slate-200 dark:border-zinc-700">
+          <div className="flex flex-col items-center py-3 border-l border-border/50">
             <span className="text-base font-bold">{group.detailsLoaded ? totalStudents : "…"}</span>
             <span className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">Total Students</span>
           </div>
 
-          <div className="flex flex-col items-center py-3 border-l border-slate-200 dark:border-zinc-700">
+          <div className="flex flex-col items-center py-3 border-l border-border/50">
             <span className="text-base font-bold">{group.detailsLoaded ? totalAssignments : "…"}</span>
             <span className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">Total Assignments</span>
           </div>
           </div>
 
-          <div className="w-full mt-3 flex items-center justify-between bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5">
+          <div className="w-full mt-3 flex items-center justify-between bg-muted border border-border/50 rounded-xl px-4 py-2.5">
             <div className="flex items-center gap-1.5">
               <FileCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-xs text-foreground font-medium">Total Submissions</span>
@@ -252,10 +255,10 @@ export default function AdminDashboard() {
           </div>
           </div>
 
-          <div className="flex-1 rounded-2xl overflow-hidden shadow-md bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-700">
+          <div className="flex-1 rounded-2xl overflow-hidden shadow-md bg-card border border-slate-100 dark:border-zinc-700">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-zinc-700 flex items-center justify-between">
               <p className="font-bold text-lg">Courses</p>
-                <span className="text-sm bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-medium border border-slate-200 dark:border-zinc-700">
+                <span className="text-sm bg-muted text-muted-foreground px-2.5 py-0.5 rounded-full font-medium border border-border/50">
                   {group.courses.length} total
                 </span>
             </div>
@@ -263,9 +266,9 @@ export default function AdminDashboard() {
          {/* scroll only if more than 2 courses */}
             <div className={`p-5 flex flex-col gap-4 ${group.courses.length > 2 ? "max-h-80 overflow-y-auto" : ""}`}>
               {group.courses.map((c) => (
-            <div key={c.id} className="rounded-xl border border-slate-200 dark:border-zinc-700 overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-3.5 bg-slate-50 dark:bg-zinc-800">
-                <div className="w-9 h-9 rounded-lg bg-red-600 dark:bg-red-700 flex items-center justify-center flex-shrink-0">
+            <div key={c.id} className="rounded-xl border border-border/50 overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-3.5 bg-muted">
+                <div className="w-9 h-9 rounded-lg bg-red-600 dark:bg-red-600 flex items-center justify-center flex-shrink-0">
                   <GraduationCap className="h-4 w-4 text-white" />
                 </div>
                   <div className="min-w-0 flex-1">
@@ -273,12 +276,12 @@ export default function AdminDashboard() {
                     <span className="text-base font-bold">{c.code}</span>
                     <span className="text-base text-muted-foreground truncate">— {c.title}</span>
                   </div>
-                    {c.term && (<span className="inline-block mt-0.5 text-xs font-medium bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full">{c.term}</span> )}
+                    {c.term && (<span className="inline-block mt-0.5 text-xs font-medium bg-muted text-foreground px-2 py-0.5 rounded-full">{c.term}</span> )}
                   </div>
               </div>
-              <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-zinc-700 bg-white dark:bg-zinc-900">
+              <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-zinc-700 bg-card">
                 <div className="flex items-center gap-2.5 px-5 py-3">
-                  <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                     <Users2 className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
                   </div>
                   <div>
@@ -287,7 +290,7 @@ export default function AdminDashboard() {
                   </div>
                   </div>
                   <div className="flex items-center gap-2.5 px-5 py-3">
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                       <BookOpen className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
                     </div>
                   <div>
@@ -296,7 +299,7 @@ export default function AdminDashboard() {
                   </div>
                   </div>
               <div className="flex items-center gap-2.5 px-5 py-3">
-                <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                   <FileCheck className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
                 </div>
                 <div>
@@ -319,7 +322,7 @@ export default function AdminDashboard() {
 
       {showRevealModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl p-6 border border-slate-100 dark:border-zinc-800 max-h-[90vh] flex flex-col">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl p-6 border border-border/50 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5 text-red-600" />
@@ -335,7 +338,7 @@ export default function AdminDashboard() {
               ) : (
                 <div className="flex flex-col gap-4">
                   {revealRequests.map((req) => (
-                    <div key={req.id} className="rounded-xl border border-slate-200 dark:border-zinc-700 p-4">
+                    <div key={req.id} className="rounded-xl border border-border/50 p-4">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
                           <p className="font-semibold text-sm">{req.instructor_name}</p>
@@ -346,11 +349,11 @@ export default function AdminDashboard() {
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg px-3 py-2">
+                        <div className="bg-muted rounded-lg px-3 py-2">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Course</p>
                           <p className="text-sm font-medium">{req.course_code}</p>
                         </div>
-                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg px-3 py-2">
+                        <div className="bg-muted rounded-lg px-3 py-2">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Assignment</p>
                           <p className="text-sm font-medium">{req.assignment_title || "—"}</p>
                         </div>
