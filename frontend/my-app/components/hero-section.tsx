@@ -76,7 +76,7 @@ export function HeroSection({ selectedUni, onSelectUni, onContinue }: HeroSectio
           </p>
 
           {/* University Selection Card */}
-          <Card className="w-full max-w-xl mb-16 float-animation mx-auto">
+          <Card className="w-full max-w-xl mb-16 mx-auto">
             <CardHeader>
               <CardTitle className="text-2xl">Select Your Institution</CardTitle>
               <CardDescription>
@@ -144,7 +144,7 @@ export function HeroSection({ selectedUni, onSelectUni, onContinue }: HeroSectio
 
               <p className="mt-6 text-sm text-muted-foreground">
                 Can&apos;t find your institution?{" "}
-                <Link href="#" className="text-primary hover:underline font-medium">
+                <Link href="/contact" className="text-primary hover:underline font-medium">
                   Register here
                 </Link>
               </p>

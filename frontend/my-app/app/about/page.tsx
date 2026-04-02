@@ -236,25 +236,6 @@ export default function Page() {
     }
   }, [animKey])
 
-  const curRef = React.useRef<HTMLDivElement>(null)
-  const curRRef = React.useRef<HTMLDivElement>(null)
-
-  // custom cursor follows mouse with smooth lag on the ring
-  React.useEffect(() => {
-    let mx = 0, my = 0, rx = 0, ry = 0
-    const move = (e: MouseEvent) => {
-      mx = e.clientX; my = e.clientY
-      if (curRef.current) { curRef.current.style.left = mx + "px"; curRef.current.style.top = my + "px" }
-    }
-    const tick = () => {
-      rx += (mx - rx) * 0.12; ry += (my - ry) * 0.12
-      if (curRRef.current) { curRRef.current.style.left = rx + "px"; curRRef.current.style.top = ry + "px" }
-      requestAnimationFrame(tick)
-    }
-    document.addEventListener("mousemove", move)
-    tick()
-    return () => document.removeEventListener("mousemove", move)
-  }, [])
 
   // scroll
   React.useEffect(() => {
@@ -328,13 +309,8 @@ export default function Page() {
       <style dangerouslySetInnerHTML={{ __html: pageStyles }} />
       <Header />
       <div className="afbiWrap outfit flex-1"
-           style={{ background: "var(--bg)", color: "var(--fg)", cursor: "none", overflowX: "hidden", transition: "background .5s,color .5s" }}>
+           style={{ background: "var(--bg)", color: "var(--fg)", overflowX: "hidden", transition: "background .5s,color .5s" }}>
 
-        {/* Custom cursor */}
-        <div ref={curRef} className="fixed pointer-events-none z-[9999] w-2.5 h-2.5 rounded-full -translate-x-1/2 -translate-y-1/2"
-             style={{ background: "var(--accent)" }} />
-        <div ref={curRRef} className="fixed pointer-events-none z-[9998] w-9 h-9 rounded-full -translate-x-1/2 -translate-y-1/2 opacity-40"
-             style={{ border: "1.5px solid var(--accent)" }} />
 
         {/* -------HERO----- */}
         <section className="relative min-h-screen flex items-center px-12 pt-32 pb-28 overflow-hidden">
