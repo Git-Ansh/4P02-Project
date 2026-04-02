@@ -137,9 +137,15 @@ export function PairListPanel({
                       {simPct}%
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all"
+                      className={`h-full rounded-full transition-all ${
+                        simPct >= 70
+                          ? "bar-glow-red"
+                          : simPct >= 40
+                            ? "bar-glow-orange"
+                            : "bar-glow-yellow"
+                      }`}
                       style={{
                         width: `${simPct}%`,
                         background:

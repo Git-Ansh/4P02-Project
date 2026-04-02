@@ -172,7 +172,7 @@ function Panel({
               if (!info) {
                 return (
                   <tr key={ln}>
-                    <td className="text-right pr-2 text-muted-foreground/30 select-none text-[11px] w-10">{ln}</td>
+                    <td className="text-right pr-2 text-primary/20 select-none text-[11px] w-10">{ln}</td>
                     <td className="px-2 whitespace-pre">{text || " "}</td>
                   </tr>
                 );
@@ -185,7 +185,7 @@ function Panel({
                   style={getLineStyle(info.confidence, focused)}
                   onClick={() => onLineClick(info.blockId)}
                 >
-                  <td className="text-right pr-2 text-muted-foreground/40 select-none text-[11px] w-10">{ln}</td>
+                  <td className="text-right pr-2 text-primary/30 select-none text-[11px] w-10">{ln}</td>
                   <td className="px-2 whitespace-pre">{text || " "}</td>
                 </tr>
               );

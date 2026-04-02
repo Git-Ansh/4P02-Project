@@ -97,7 +97,7 @@ function SidebarContent({
               onClick={onNavigate}
             >
               <Link href={item.href}>
-                <item.icon className={`h-5 w-5 shrink-0 ${active ? "text-primary" : ""}`} />
+                <item.icon className={`h-5 w-5 shrink-0 ${active ? "text-primary drop-shadow-[0_0_6px_hsl(var(--primary)/0.5)]" : ""}`} />
                 {!collapsed && item.label}
               </Link>
             </Button>

@@ -17,6 +17,7 @@ export interface User {
   sub: string;
   role: string;
   university_slug?: string;
+  full_name?: string;
   exp: number;
 }
 

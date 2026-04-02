@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CountUp } from "@/components/count-up";
 import { apiFetch } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 import { StatsCard } from "@/components/analysis/stats-card";
@@ -38,8 +39,10 @@ export default function InstructorDashboard() {
 
   React.useEffect(() => {
     const user = getCurrentUser();
-    if (user?.sub) {
-      setName(user.sub.split("@")[0]);
+    if (user) {
+      // Use first name from full_name if available, otherwise email prefix
+      const fullName = user.full_name || "";
+      setName(fullName.split(" ")[0] || user.sub.split("@")[0]);
     }
 
     apiFetch<InstructorDashboardData>("/api/instructor/dashboard")
@@ -158,14 +161,14 @@ export default function InstructorDashboard() {
       {/* Row 2: Stats Cards — 4 columns, Flagged Pairs has severity breakdown */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* My Courses */}
-        <Card className="rounded-xl glass glow-hover accent-line">
+        <Card className="rounded-xl glass glow-hover accent-line card-stagger">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                   MY COURSES
                 </p>
-                <p className="mt-2 text-4xl font-bold font-jb neon-num">{data.course_count}</p>
+                <p className="mt-2 text-4xl font-bold font-jb neon-num"><CountUp to={data.course_count} /></p>
                 {data.course_count === 1 && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {/* show first course code if available */}
@@ -181,7 +184,7 @@ export default function InstructorDashboard() {
         </Card>
 
         {/* Assignments */}
-        <Card className="rounded-xl glass glow-hover accent-line">
+        <Card className="rounded-xl glass glow-hover accent-line card-stagger">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
@@ -189,7 +192,7 @@ export default function InstructorDashboard() {
                   ASSIGNMENTS
                 </p>
                 <p className="mt-2 text-4xl font-bold font-jb neon-num">
-                  {data.total_assignments}
+                  <CountUp to={data.total_assignments} />
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">posted across all courses</p>
               </div>
@@ -201,7 +204,7 @@ export default function InstructorDashboard() {
         </Card>
 
         {/* Submissions */}
-        <Card className="rounded-xl glass glow-hover accent-line">
+        <Card className="rounded-xl glass glow-hover accent-line card-stagger">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
@@ -209,7 +212,7 @@ export default function InstructorDashboard() {
                   SUBMISSIONS
                 </p>
                 <p className="mt-2 text-4xl font-bold font-jb neon-num">
-                  {data.total_submissions}
+                  <CountUp to={data.total_submissions} />
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">made across all courses</p>
               </div>
@@ -229,7 +232,7 @@ export default function InstructorDashboard() {
                   FLAGGED PAIRS
                 </p>
                 <p className="mt-2 text-4xl font-bold font-jb neon-num text-destructive">
-                  {data.flagged_high_count + data.flagged_med_count + data.flagged_low_count}
+                  <CountUp to={data.flagged_high_count + data.flagged_med_count + data.flagged_low_count} />
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   <span className="text-red-500 font-medium">{data.flagged_high_count} High</span>
@@ -247,7 +250,7 @@ export default function InstructorDashboard() {
       </section>
 
       {/* Row 3: Similarity Flags */}
-      <Card className="rounded-xl glass glow-hover accent-line">
+      <Card className="rounded-xl glass glow-hover accent-line card-stagger">
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -359,7 +362,7 @@ export default function InstructorDashboard() {
       {/* Row 4: Recent Analyses + Course Health */}
       <section className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         {/* Recent Analyses */}
-        <Card className="rounded-xl glass glow-hover accent-line">
+        <Card className="rounded-xl glass glow-hover accent-line card-stagger">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Recent Analyses</CardTitle>
             <p className="text-xs text-muted-foreground">Last 7 days</p>
@@ -420,7 +423,7 @@ export default function InstructorDashboard() {
         </Card>
 
         {/* Course Health */}
-        <Card className="rounded-xl glass glow-hover accent-line">
+        <Card className="rounded-xl glass glow-hover accent-line card-stagger">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Course Health</CardTitle>
             <p className="text-xs text-muted-foreground">

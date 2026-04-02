@@ -85,6 +85,7 @@ async def login(body: LoginRequest):
             "sub": user["email"],
             "role": user["role"],
             "university_slug": body.university_slug,
+            "full_name": user.get("full_name", ""),
         }
     )
     return TokenResponse(
