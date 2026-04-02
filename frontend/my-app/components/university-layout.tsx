@@ -91,11 +91,13 @@ function SidebarContent({
               asChild
               variant={active ? "secondary" : "ghost"}
               size={collapsed ? "icon" : "default"}
-              className={collapsed ? "w-full" : "w-full justify-start gap-3"}
+              className={`${
+                collapsed ? "w-full" : "w-full justify-start gap-3 font-jb text-xs tracking-wide uppercase"
+              } ${active ? "border-l-2 border-l-primary rounded-l-none" : ""}`}
               onClick={onNavigate}
             >
               <Link href={item.href}>
-                <item.icon className="h-5 w-5 shrink-0" />
+                <item.icon className={`h-5 w-5 shrink-0 ${active ? "text-primary" : ""}`} />
                 {!collapsed && item.label}
               </Link>
             </Button>
@@ -241,7 +243,7 @@ export function UniversityLayout({ navItems, children }: UniversityLayoutProps) 
       <div className="flex h-screen overflow-hidden university-theme" style={themeStyle}>
         {/* Desktop sidebar — fixed full height, never scrolls */}
         <aside
-          className={`hidden md:flex border-r bg-background flex-col shrink-0 h-screen sticky top-0 overflow-hidden transition-all duration-200 ${
+          className={`hidden md:flex border-r border-border/50 flex-col shrink-0 h-screen sticky top-0 overflow-hidden transition-all duration-200 ${
             collapsed ? "w-[60px]" : "w-64"
           }`}
         >

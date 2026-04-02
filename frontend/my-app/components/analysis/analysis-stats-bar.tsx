@@ -20,7 +20,7 @@ export function AnalysisStatsBar({
   clearCount,
 }: AnalysisStatsBarProps) {
   return (
-    <div className="sticky top-0 z-10 rounded-xl border bg-background/95 backdrop-blur-sm px-4 py-2.5 shadow-sm flex items-center gap-4 flex-wrap">
+    <div className="sticky top-0 z-10 rounded-lg border border-border/50 backdrop-blur-xl bg-background/80 px-5 py-3 flex items-center gap-5 flex-wrap">
       <Stat label="Students" value={totalStudents} />
       <div className="w-px h-6 bg-border" />
       <Stat label="Evaluated" value={pairsEvaluated} />
@@ -49,10 +49,10 @@ function Stat({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`text-lg font-bold tabular-nums ${accent ? "text-red-500" : ""}`}>
+      <span className={`text-lg font-bold tabular-nums font-jb neon-num ${accent ? "text-red-500" : ""}`}>
         {value}
       </span>
-      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+      <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-jb">
         {label}
       </span>
     </div>

@@ -99,7 +99,7 @@ export function PairListPanel({
               <Link
                 key={pair.pair_id}
                 href={`/instructor/courses/${courseId}/assignments/${assignmentId}/analysis/${pair.pair_id}`}
-                className={`block rounded-xl border p-4 transition-all hover:bg-muted/50 hover:shadow-sm ${
+                className={`block rounded-lg border border-border/50 p-4 transition-all hover:border-primary/25 hover:bg-primary/[0.03] ${
                   belowThreshold ? "opacity-25" : ""
                 }`}
               >
@@ -126,7 +126,7 @@ export function PairListPanel({
                       Similarity
                     </span>
                     <span
-                      className={`text-lg font-bold tabular-nums ${
+                      className={`text-lg font-bold tabular-nums font-jb ${
                         simPct >= 70
                           ? "text-red-500"
                           : simPct >= 40
@@ -166,7 +166,7 @@ export function PairListPanel({
                   <span>
                     density {Math.round(density * 100)}%
                   </span>
-                  <span className="ml-auto font-mono text-[10px]">
+                  <span className="ml-auto font-jb text-[10px]">
                     sev {pair.severity_score.toFixed(2)}
                   </span>
                 </div>

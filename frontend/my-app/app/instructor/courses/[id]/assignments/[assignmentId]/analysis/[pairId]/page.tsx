@@ -206,7 +206,7 @@ export default function PairDetailPage() {
                         ? `${revealApprovals[p.pair_id].s1} vs ${revealApprovals[p.pair_id].s2}`
                         : `${p.student_1} vs ${p.student_2}`}
                     </span>
-                    <span className={`shrink-0 font-bold tabular-nums ${getSeverityColor(p.similarity)}`}>
+                    <span className={`shrink-0 font-bold tabular-nums font-jb ${getSeverityColor(p.similarity)}`}>
                       {sim}%
                     </span>
                   </div>
@@ -244,11 +244,11 @@ export default function PairDetailPage() {
               <span className="font-semibold">{pair.student_2}</span>
             )}
             <span className="w-px h-4 bg-border" />
-            <span className={`font-bold tabular-nums ${getSeverityColor(pair.similarity)}`}>
+            <span className={`font-bold tabular-nums font-jb ${getSeverityColor(pair.similarity)}`}>
               {Math.round(pair.similarity * 100)}%
             </span>
             <SeverityBadge level={getSeverityLevel(pair.severity_score)} />
-            <span className="text-muted-foreground text-xs">
+            <span className="text-muted-foreground text-xs font-jb tracking-wide">
               {pair.summary.total_blocks} blocks ({pair.summary.high_confidence_blocks} high)
             </span>
             <span className="ml-auto" />

@@ -19,7 +19,7 @@ export function SeverityBadge({ level, className }: SeverityBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold font-jb uppercase tracking-wider",
         colorClass,
         className,
       )}

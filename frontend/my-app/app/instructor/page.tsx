@@ -137,28 +137,35 @@ export default function InstructorDashboard() {
   const cleanCourses = data.course_count - courseHealth.size;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      {/* Row 1: Welcome Banner — full width with light-mode white bg + shadow */}
-      <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 px-4 sm:px-6 lg:px-8 py-5 bg-card shadow-md">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Welcome back{name ? `, ${name}` : ""}
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Your academic integrity command centre
-        </p>
+    <div className="space-y-5 p-5 sm:p-6 lg:p-8 hud-grid min-h-full">
+      {/* Row 1: Welcome Banner */}
+      <div className="-mx-5 sm:-mx-6 lg:-mx-8 -mt-5 sm:-mt-6 lg:-mt-8 px-5 sm:px-6 lg:px-8 py-6 border-b border-border/50" style={{ background: "linear-gradient(180deg, hsl(var(--card) / 0.5) 0%, transparent 100%)" }}>
+        <div className="flex items-center gap-4">
+          <span className="pulse-dot shrink-0" />
+          <div className="flex-1">
+            <p className="text-[10px] font-jb uppercase tracking-[0.2em] text-primary/70 mb-1">System Online</p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Welcome back{name ? `, ${name}` : ""}
+            </h1>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-[10px] font-jb text-muted-foreground/50 tracking-wider uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
+            {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+          </div>
+        </div>
       </div>
 
       {/* Row 2: Stats Cards — 4 columns, Flagged Pairs has severity breakdown */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* My Courses */}
-        <Card className="rounded-2xl shadow-sm">
+        <Card className="rounded-xl glass glow-hover accent-line">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                   MY COURSES
                 </p>
-                <p className="mt-2 text-4xl font-bold">{data.course_count}</p>
+                <p className="mt-2 text-4xl font-bold font-jb neon-num">{data.course_count}</p>
                 {data.course_count === 1 && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {/* show first course code if available */}
@@ -166,62 +173,62 @@ export default function InstructorDashboard() {
                   </p>
                 )}
               </div>
-              <div className="rounded-lg bg-muted p-2">
-                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-2">
+                <GraduationCap className="h-4 w-4 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Assignments */}
-        <Card className="rounded-2xl shadow-sm">
+        <Card className="rounded-xl glass glow-hover accent-line">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                   ASSIGNMENTS
                 </p>
-                <p className="mt-2 text-4xl font-bold">
+                <p className="mt-2 text-4xl font-bold font-jb neon-num">
                   {data.total_assignments}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">posted across all courses</p>
               </div>
-              <div className="rounded-lg bg-muted p-2">
-                <ClipboardList className="h-4 w-4 text-muted-foreground" />
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-2">
+                <ClipboardList className="h-4 w-4 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Submissions */}
-        <Card className="rounded-2xl shadow-sm">
+        <Card className="rounded-xl glass glow-hover accent-line">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                   SUBMISSIONS
                 </p>
-                <p className="mt-2 text-4xl font-bold">
+                <p className="mt-2 text-4xl font-bold font-jb neon-num">
                   {data.total_submissions}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">made across all courses</p>
               </div>
-              <div className="rounded-lg bg-muted p-2">
-                <Upload className="h-4 w-4 text-muted-foreground" />
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-2">
+                <Upload className="h-4 w-4 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Flagged Pairs — with severity breakdown + donut chart */}
-        <Card className="rounded-2xl shadow-sm border-destructive/40">
+        <Card className="rounded-2xl glass glow-hover accent-line overflow-hidden border-red-500/30">
           <CardContent className="pt-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                   FLAGGED PAIRS
                 </p>
-                <p className="mt-2 text-4xl font-bold text-destructive">
+                <p className="mt-2 text-4xl font-bold font-jb neon-num text-destructive">
                   {data.flagged_high_count + data.flagged_med_count + data.flagged_low_count}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -240,7 +247,7 @@ export default function InstructorDashboard() {
       </section>
 
       {/* Row 3: Similarity Flags */}
-      <Card className="rounded-2xl shadow-sm">
+      <Card className="rounded-xl glass glow-hover accent-line">
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -281,7 +288,7 @@ export default function InstructorDashboard() {
           ) : (
             <div className="space-y-0">
               {/* Table header */}
-              <div className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                 <span>Students</span>
                 <span>Course &amp; Assignment</span>
                 <span>Similarity</span>
@@ -293,7 +300,7 @@ export default function InstructorDashboard() {
                   <Link
                     key={`${pair.assignment_id}_${pair.pair_id}_${idx}`}
                     href={`/instructor/courses/${pair.course_id}/assignments/${pair.assignment_id}/analysis/${pair.pair_id}`}
-                    className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 items-center rounded-xl border p-3 hover:bg-muted/50 transition-colors"
+                    className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 items-center rounded-lg border border-border/50 p-3 transition-all hover:border-primary/25 hover:bg-primary/[0.03]"
                   >
                     {/* Students */}
                     <div className="flex items-center gap-2 min-w-0">
@@ -352,7 +359,7 @@ export default function InstructorDashboard() {
       {/* Row 4: Recent Analyses + Course Health */}
       <section className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         {/* Recent Analyses */}
-        <Card className="rounded-2xl shadow-sm">
+        <Card className="rounded-xl glass glow-hover accent-line">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Recent Analyses</CardTitle>
             <p className="text-xs text-muted-foreground">Last 7 days</p>
@@ -372,7 +379,7 @@ export default function InstructorDashboard() {
                   >
                     {/* Icon */}
                     <div className="rounded-lg bg-muted p-2 shrink-0">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      <TrendingUp className="h-4 w-4 text-primary" />
                     </div>
 
                     {/* Title + meta */}
@@ -413,7 +420,7 @@ export default function InstructorDashboard() {
         </Card>
 
         {/* Course Health */}
-        <Card className="rounded-2xl shadow-sm">
+        <Card className="rounded-xl glass glow-hover accent-line">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Course Health</CardTitle>
             <p className="text-xs text-muted-foreground">
