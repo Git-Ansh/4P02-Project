@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* JetBrains Mono utility — tactical dashboard font for metrics and labels */
-@utility font-jb {
+.font-jb {
   font-family: var(--font-jetbrains), 'JetBrains Mono', ui-monospace, monospace;
 }
 
@@ -114,7 +114,7 @@
 /* ── JARVIS Dashboard Utilities ── */
 
 /* Glass card — lifted panel with frosted backdrop + edge highlight */
-@utility glass {
+.glass {
   background: linear-gradient(
     165deg,
     hsl(var(--card)) 0%,
@@ -129,12 +129,12 @@
 }
 
 /* Stat number glow — very subtle, not harsh */
-@utility neon-num {
+.neon-num {
   text-shadow: 0 0 20px hsl(var(--primary) / 0.25), 0 0 40px hsl(var(--primary) / 0.08);
 }
 
 /* Pulse dot — refined with smoother animation */
-@utility pulse-dot {
+.pulse-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;

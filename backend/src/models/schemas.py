@@ -9,6 +9,7 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     university_slug: Optional[str] = None
+    role: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -92,7 +93,6 @@ class DashboardStats(BaseModel):
 class AdminDashboardStats(BaseModel):
     instructor_count: int
     course_count: int
-    student_record_count: int
 
 
 class UniversityUpdate(BaseModel):
@@ -212,32 +212,6 @@ class UniversityDetailResponse(BaseModel):
     admin_count: int
 
 
-# ── Student Records (admin-managed, no login) ──────────────────────────────
-
-
-class StudentRecordCreate(BaseModel):
-    full_name: str = Field(min_length=1)
-    email: EmailStr
-    student_number: str = Field(min_length=1)
-    course_ids: list[str] = Field(default_factory=list)
-
-
-class StudentRecordUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    student_number: Optional[str] = None
-    course_ids: Optional[list[str]] = None
-
-
-class StudentRecordResponse(BaseModel):
-    id: str
-    full_name: str
-    email: str
-    student_number: str
-    courses: list[dict]
-    created_at: datetime
-
-
 # ── Submission Tokens ───────────────────────────────────────────────────────
 
 
@@ -295,20 +269,3 @@ class AnonymousSubmissionResponse(BaseModel):
     submitted_at: datetime
 
 
-# ── Course Students (instructor view) ─────────────────────────────────────
-
-
-class CourseStudentResponse(BaseModel):
-    id: str
-    full_name: str
-    email: str
-    student_number: str
-
-
-class EnrollStudentsRequest(BaseModel):
-    student_ids: list[str] = Field(min_length=1)
-
-
-class SendTokenEmailRequest(BaseModel):
-    student_ids: list[str] = Field(default_factory=list)
-    send_to_all: bool = False
