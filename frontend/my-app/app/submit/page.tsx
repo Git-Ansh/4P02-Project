@@ -70,25 +70,8 @@ function getLanguageLabel(lang: string | undefined): string {
   return LANGUAGE_LABELS[lang] || lang.toUpperCase();
 }
 
-function getAllowedExts(lang: Language | ""): string[] {
-  if (lang === "c") return [".c", ".h", ".zip"];
-  if (lang === "cpp")
-    return [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx", ".zip"];
-  if (lang === "java") return [".java", ".zip"];
-  if (lang === "python") return [".py", ".zip"];
-  return [
-    ".c",
-    ".h",
-    ".cpp",
-    ".cc",
-    ".cxx",
-    ".hpp",
-    ".hh",
-    ".hxx",
-    ".java",
-    ".py",
-    ".zip",
-  ];
+function getAllowedExts(_lang: Language | ""): string[] {
+  return [".zip"];
 }
 
 function fileHasAllowedExt(fileName: string, allowed: string[]) {
@@ -509,18 +492,6 @@ export default function SubmitPage() {
                     />
                   </div>
 
-                  {assignmentLanguage && (
-                    <div className="text-xs text-muted-foreground">
-                      Allowed extensions for{" "}
-                      <span className="font-medium">
-                        {getLanguageLabel(assignmentLanguage)}
-                      </span>:{" "}
-                      <span className="font-medium">
-                        {allowedExts.join(", ")}
-                      </span>
-                    </div>
-                  )}
-
                   {/* File upload */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
@@ -550,6 +521,7 @@ export default function SubmitPage() {
                       ref={inputRef}
                       type="file"
                       multiple
+                      accept=".zip"
                       className="hidden"
                       onChange={onPick}
                     />
@@ -565,14 +537,14 @@ export default function SubmitPage() {
                     >
                       <div className="space-y-2 text-center">
                         <div className="text-sm font-medium">
-                          Drag and drop files here
+                          Drag and drop your ZIP here
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          You can select multiple files or a .zip archive.
+                          Only .zip archives are accepted.
                         </div>
                         <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <Archive className="h-3 w-3" />
-                          ZIP files are extracted automatically
+                          ZIP contents are extracted automatically
                         </div>
                       </div>
                     </div>
@@ -620,7 +592,7 @@ export default function SubmitPage() {
                       </div>
                     )}
                     <div className="text-xs text-muted-foreground">
-                      Limits: 5MB per file, 25MB total. Source files only.
+                      Limits: 25MB max. ZIP files only.
                     </div>
                   </div>
 

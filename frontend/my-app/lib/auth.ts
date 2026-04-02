@@ -4,6 +4,7 @@ interface LoginParams {
   email: string;
   password: string;
   university_slug?: string;
+  role?: string;
 }
 
 interface TokenResponse {
