@@ -2,13 +2,13 @@
 
 A web-based plagiarism detection system for academic code submissions. Instructors upload student code (C, C++, Java), run similarity analysis against classmates and historical repositories, and review flagged pairs in a side-by-side diff viewer. All student identity is encrypted and anonymized.
 
-**Live System:** https://academicfbi.vercel.app
+**Live System:** https://4-p02-project.vercel.app
 
 ## Quick Start (TA / Evaluator Access)
 
 ### 1. Access the System
 
-Visit **https://academicfbi.vercel.app** and log in with your provided credentials.
+Visit **https://4-p02-project.vercel.app** and log in with your provided credentials.
 
 ### 2. Upload a Test Repository
 
