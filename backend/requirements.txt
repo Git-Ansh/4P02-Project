@@ -29,6 +29,9 @@ mmh3>=4.0.0
 # Email
 requests>=2.31.0
 
+# Encryption
+cryptography>=42.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 pydantic>=2.5.0

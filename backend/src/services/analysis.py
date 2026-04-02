@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 from src.config.settings import settings
+from src.utils.encryption import decrypt_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,15 @@ async def prepare_submission_zips(db, slug: str, course_id: ObjectId, assignment
     zips_created = 0
     for doc in docs:
         student_number = doc["student_number"]
-        student_dir = os.path.join(upload_base, student_number)
+        submission_id = doc.get("submission_id", student_number)
+
+        # Try disk first: encrypted folder, then legacy folder
+        student_dir = os.path.join(upload_base, submission_id)
         if not os.path.isdir(student_dir):
-            logger.warning("  student %s dir missing: %s", student_number, student_dir)
+            student_dir = os.path.join(upload_base, student_number)
+
+        if not os.path.isdir(student_dir):
+            logger.warning("  student %s dir missing", student_number)
             continue
 
         zip_path = os.path.join(temp_dir, f"{student_number}.zip")
@@ -52,7 +59,12 @@ async def prepare_submission_zips(db, slug: str, course_id: ObjectId, assignment
                 for fname in files:
                     full_path = os.path.join(root, fname)
                     arcname = os.path.relpath(full_path, student_dir)
-                    zf.write(full_path, arcname)
+                    try:
+                        with open(full_path, "rb") as fh:
+                            raw = decrypt_bytes(fh.read())
+                        zf.writestr(arcname, raw)
+                    except Exception:
+                        zf.write(full_path, arcname)
         zips_created += 1
 
     logger.warning("prepare_submission_zips: created %d student ZIPs in %s", zips_created, temp_dir)

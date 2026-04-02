@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from src.api.deps import require_role
 from src.config.database import get_university_db, get_main_db
 from src.config.settings import settings
+from src.utils.encryption import decrypt_bytes
 from src.models.schemas import (
     AnalysisReportResponse,
     AnalysisRunResponse,
@@ -55,13 +56,24 @@ def _anon_label(index: int) -> str:
 
 
 def _build_anon_map(pairs: list[dict]) -> dict[str, str]:
-    """Build a stable mapping of real student id → anonymous label."""
+    """Build a stable mapping of real student id → anonymous label.
+
+    Reference submissions (prefixed with ``_ref_``) get a distinct
+    ``Ref A``, ``Ref B``, … label so the frontend can color-code them.
+    """
     seen: dict[str, str] = {}
+    student_idx = 0
+    ref_idx = 0
     for pair in pairs:
         for key in ("student_1", "student_2"):
             sid = pair.get(key, "")
             if sid and sid not in seen:
-                seen[sid] = _anon_label(len(seen))
+                if sid.startswith("_ref_"):
+                    seen[sid] = f"Ref {chr(ord('A') + ref_idx % 26)}"
+                    ref_idx += 1
+                else:
+                    seen[sid] = _anon_label(student_idx)
+                    student_idx += 1
     return seen
 
 
@@ -715,7 +727,10 @@ async def download_submissions(
 
     with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
         for idx, doc in enumerate(docs, start=1):
-            student_dir = os.path.join(upload_base, doc["student_number"])
+            sid = doc.get("submission_id", doc["student_number"])
+            student_dir = os.path.join(upload_base, sid)
+            if not os.path.isdir(student_dir):
+                student_dir = os.path.join(upload_base, doc["student_number"])
             folder_name = f"Submission_{idx:02d}"
             if not os.path.isdir(student_dir):
                 continue
@@ -725,7 +740,12 @@ async def download_submissions(
                     arcname = os.path.join(
                         folder_name, os.path.relpath(full, student_dir)
                     )
-                    zf.write(full, arcname)
+                    try:
+                        with open(full, "rb") as fh:
+                            raw = decrypt_bytes(fh.read())
+                        zf.writestr(arcname, raw)
+                    except Exception:
+                        zf.write(full, arcname)  # fallback for unencrypted
 
     safe_title = assignment.get("title", "assignment").replace(" ", "_")
     filename = f"{course.get('code', 'course')}_{safe_title}_submissions.zip"

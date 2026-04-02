@@ -160,7 +160,7 @@ function Panel({
   return (
     <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden">
       <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2">
-        <span className="font-semibold">{studentName}</span>
+        <span className={`font-semibold ${studentName.startsWith("Ref ") ? "text-emerald-500" : "text-red-400"}`}>{studentName}</span>
       </div>
       <div ref={bodyRef} className="overflow-auto flex-1">
         <table className="font-mono text-[12px] leading-[18px] w-full border-collapse">

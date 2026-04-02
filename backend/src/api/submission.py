@@ -13,6 +13,7 @@ from src.config.settings import settings
 from src.models.schemas import PublicAssignmentResponse, SubmissionResponse
 from src.services.email import send_submission_receipt
 from src.utils.zip_utils import resolve_nested_zips
+from src.utils.encryption import encrypt_bytes, encrypt_string, make_submission_id
 
 router = APIRouter(prefix="/api/public", tags=["Public Submission"])
 
@@ -171,19 +172,25 @@ async def submit_assignment(
             detail="You have already submitted this assignment. Resubmissions are not allowed.",
         )
 
-    # 4. If resubmission allowed and existing submission, delete old files + record
+    # 4. Generate encrypted submission ID (used as folder name on disk)
+    submission_id = make_submission_id(student_name, student_number, student_email)
+
+    # 4b. If resubmission allowed and existing submission, delete old files + record
     upload_dir = os.path.join(
+        settings.UPLOAD_DIR, slug, str(course_oid), str(assignment_oid), submission_id
+    )
+    # Also check legacy plaintext folder
+    legacy_dir = os.path.join(
         settings.UPLOAD_DIR, slug, str(course_oid), str(assignment_oid), student_number
     )
 
     if existing_submission and allow_resubmission:
-        # Remove old files from disk
-        if os.path.exists(upload_dir):
-            shutil.rmtree(upload_dir)
-        # Remove old DB record
+        for d in (upload_dir, legacy_dir):
+            if os.path.exists(d):
+                shutil.rmtree(d)
         await db.submissions.delete_one({"_id": existing_submission["_id"]})
 
-    # 5. Save files to disk
+    # 5. Save files to disk (plaintext first for ZIP extraction + validation)
     os.makedirs(upload_dir, exist_ok=True)
 
     for f in files:
@@ -202,20 +209,24 @@ async def submit_assignment(
             for fname in fnames:
                 ext = os.path.splitext(fname)[1].lower()
                 if ext and ext not in valid_src_exts:
-                    # Clean up and reject
                     shutil.rmtree(upload_dir, ignore_errors=True)
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f'File "{fname}" (from ZIP) is not allowed for {language}. Allowed: {", ".join(sorted(valid_src_exts))}',
                     )
 
-    # 5d. Build file_infos from whatever is actually on disk after extraction
+    # 5d. Build file_infos, then encrypt all files on disk
     file_infos = []
     for root, _, fnames in os.walk(upload_dir):
         for fname in fnames:
             full = os.path.join(root, fname)
             rel = os.path.relpath(full, upload_dir)
             file_infos.append({"name": rel, "size": os.path.getsize(full)})
+            # Encrypt file in-place
+            with open(full, "rb") as fh:
+                raw = fh.read()
+            with open(full, "wb") as fh:
+                fh.write(encrypt_bytes(raw))
 
     if not file_infos:
         shutil.rmtree(upload_dir, ignore_errors=True)
@@ -224,22 +235,21 @@ async def submit_assignment(
             detail="No valid source files found in submission.",
         )
 
-    # 6. Insert submission document
+    # 6. Insert submission document (student identity encrypted)
     now = datetime.now(timezone.utc)
     doc = {
         "assignment_id": assignment_oid,
         "course_id": course_oid,
-        "student_name": student_name,
-        "student_email": student_email,
-        "student_number": student_number,
+        "submission_id": submission_id,
+        "student_name_enc": encrypt_string(student_name),
+        "student_email_enc": encrypt_string(student_email),
+        "student_number": student_number,  # kept for resubmission lookup
         "language": language,
         "comment": comment,
         "files": file_infos,
         "submitted_at": now,
     }
     result = await db.submissions.insert_one(doc)
-
-    submission_id = str(result.inserted_id)
 
     # 7. Send email receipt in background thread (non-blocking)
     course_code = payload.get("course_code", "")
