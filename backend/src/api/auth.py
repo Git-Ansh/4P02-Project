@@ -79,6 +79,11 @@ async def login(body: LoginRequest):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    if body.role and user["role"] != body.role:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
 
     token = create_access_token(
         {
