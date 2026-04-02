@@ -40,6 +40,24 @@ export default function InstructorDashboard() {
     "ALL" | "HIGH" | "LOW"
   >("ALL");
 
+  const greeting = React.useMemo(() => {
+    const hour = new Date().getHours();
+    const timeGreetings =
+      hour < 12 ? ["Good morning", "Morning"] :
+      hour < 17 ? ["Good afternoon", "Afternoon"] :
+      hour < 21 ? ["Good evening", "Evening"] :
+      ["Burning the midnight oil", "Late night session"];
+    const generic = [
+      "Welcome back",
+      "Ready to review",
+      "Systems ready",
+      "Back at it",
+      "Let\u2019s get to work",
+    ];
+    const pool = [...timeGreetings, ...generic];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }, []);
+
   // Quick-launch analysis
   const [qlOpen, setQlOpen] = React.useState(false);
   const [qlAssignments, setQlAssignments] = React.useState<{ id: string; title: string; course_id: string; course_code: string }[]>([]);
@@ -187,7 +205,7 @@ export default function InstructorDashboard() {
           <div className="flex-1">
             <p className="text-[10px] font-jb uppercase tracking-[0.2em] text-primary/70 mb-1">System Online</p>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Welcome back{name ? `, ${name}` : ""}
+              {greeting}{name ? `, ${name}` : ""}
             </h1>
           </div>
           <div className="hidden sm:flex items-center gap-3">
