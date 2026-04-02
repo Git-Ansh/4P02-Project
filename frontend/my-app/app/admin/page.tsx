@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Users, GraduationCap, Eye, BookOpen, FileCheck, Mail, Moon, ClipboardList, CheckCircle, XCircle } from "lucide-react";
+import { Users, UserCheck, GraduationCap, Eye, BookOpen, Users2, FileCheck, Mail, Moon, ClipboardList, CheckCircle, XCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 interface RevealRequest {
@@ -17,6 +17,7 @@ interface RevealRequest {
 
 interface AdminStats {
   instructor_count: number;
+  student_record_count: number;
   course_count: number;
 }
 interface CourseEntry {
@@ -29,6 +30,7 @@ interface CourseEntry {
 }
 
 interface CourseDetails {
+  student_count: number;
   assignment_count: number;
   submission_count: number;
 }
@@ -36,6 +38,7 @@ interface InstructorGroup {
   email: string;
   name: string;
   courses: CourseEntry[];
+  studentsByCourse: Record<string, number>;
   assignmentsByCourse: Record<string, number>;
   submissionsByCourse: Record<string, number>;
   detailsLoaded: boolean;
@@ -100,6 +103,7 @@ export default function AdminDashboard() {
               email: key,
               name: course.instructor_name,
               courses: [],
+              studentsByCourse: {},
               assignmentsByCourse: {},
               submissionsByCourse: {},
               detailsLoaded: false,
@@ -118,6 +122,7 @@ export default function AdminDashboard() {
                   if (g.email !== group.email) return g;
                   return {
                     ...g,
+                    studentsByCourse: { ...g.studentsByCourse, [course.id]: details.student_count },
                     assignmentsByCourse: { ...g.assignmentsByCourse, [course.id]: details.assignment_count },
                     submissionsByCourse: { ...g.submissionsByCourse, [course.id]: details.submission_count },
                     detailsLoaded: true,
@@ -153,13 +158,14 @@ export default function AdminDashboard() {
         </button>
       </div>
       <div className="px-6 lg:px-10 py-8 flex flex-col gap-8">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl glass glow-hover accent-line card-stagger p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Total Instructors</p>
                 <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.instructor_count ?? "-")}</p>
               </div>
+
               <div className="rounded-lg bg-primary/10 border border-primary/20 p-2.5">
                 <Users className="h-5 w-5 text-primary" />
               </div>
@@ -168,15 +174,28 @@ export default function AdminDashboard() {
           <div className="rounded-xl glass glow-hover accent-line card-stagger p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Active Courses</p>
-                <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.course_count ?? "-")}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Student Records</p>
+                <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.student_record_count ?? "-")}</p>
               </div>
+
               <div className="rounded-lg bg-primary/10 border border-primary/20 p-2.5">
-                <GraduationCap className="h-5 w-5 text-primary" />
+                <UserCheck className="h-5 w-5 text-primary" />
               </div>
             </div>
           </div>
+
+      <div className="rounded-xl glass glow-hover accent-line card-stagger p-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">Active Courses</p>
+              <p className="text-4xl font-bold font-jb neon-num mt-1">{loading ? "—" : (stats?.course_count ?? "-")}</p>
+              </div>
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-2.5">
+              <GraduationCap className="h-5 w-5 text-primary" />
+            </div>
+          </div>
         </div>
+      </div>
 
     {instructorGroups.length > 0 && (
         <div>
@@ -187,9 +206,11 @@ export default function AdminDashboard() {
         <div className="flex flex-col gap-6">
 
     {instructorGroups.map((group) => {
+      const totalStudents = Object.values(group.studentsByCourse).reduce((a, b) => a + b, 0);
       const totalAssignments = Object.values(group.assignmentsByCourse).reduce((a, b) => a + b, 0);
       const totalSubmissions = Object.values(group.submissionsByCourse).reduce((a, b) => a + b, 0);
       return (
+
       <div key={group.email} className="flex gap-5 items-stretch">
         <div className="flex-shrink-0 rounded-2xl overflow-hidden shadow-md bg-card border border-slate-100 dark:border-zinc-700" style={{ width: "320px" }}>
           <div className="h-20 bg-gradient-to-r from-red-600 to-rose-500 dark:from-primary/30 dark:to-primary/10 relative">
@@ -207,10 +228,15 @@ export default function AdminDashboard() {
             <span className="truncate max-w-[180px]">{group.email}</span>
           </div>
 
-          <div className="w-full mt-4 grid grid-cols-2 rounded-xl overflow-hidden border border-border/50 bg-muted">
+          <div className="w-full mt-4 grid grid-cols-3 rounded-xl overflow-hidden border border-border/50 bg-muted">
             <div className="flex flex-col items-center py-3">
               <span className="text-base font-bold">{group.courses.length}</span>
                 <span className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">Courses</span>
+          </div>
+
+          <div className="flex flex-col items-center py-3 border-l border-border/50">
+            <span className="text-base font-bold">{group.detailsLoaded ? totalStudents : "…"}</span>
+            <span className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">Total Students</span>
           </div>
 
           <div className="flex flex-col items-center py-3 border-l border-border/50">
@@ -253,7 +279,16 @@ export default function AdminDashboard() {
                     {c.term && (<span className="inline-block mt-0.5 text-xs font-medium bg-muted text-foreground px-2 py-0.5 rounded-full">{c.term}</span> )}
                   </div>
               </div>
-              <div className="grid grid-cols-2 divide-x divide-slate-100 dark:divide-zinc-700 bg-card">
+              <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-zinc-700 bg-card">
+                <div className="flex items-center gap-2.5 px-5 py-3">
+                  <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <Users2 className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-base font-bold leading-none">{group.detailsLoaded ? (group.studentsByCourse[c.id] ?? 0) : "…"}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Students</p>
+                  </div>
+                  </div>
                   <div className="flex items-center gap-2.5 px-5 py-3">
                     <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                       <BookOpen className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />

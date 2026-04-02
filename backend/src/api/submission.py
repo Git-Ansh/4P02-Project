@@ -82,10 +82,10 @@ async def get_assignment_from_token(token: str):
 
 
 ALLOWED_EXTENSIONS = {
-    "c": [".zip"],
-    "cpp": [".zip"],
-    "java": [".zip"],
-    "python": [".zip"],
+    "c": [".c", ".h", ".zip"],
+    "cpp": [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh", ".hxx", ".zip"],
+    "java": [".java", ".zip"],
+    "python": [".py", ".zip"],
 }
 
 # Source-only extensions (no .zip) — used to validate extracted ZIP contents
@@ -122,7 +122,23 @@ async def submit_assignment(
 
     db = get_university_db(slug)
 
-    # 2. Check resubmission policy
+    # 2. Verify student is enrolled
+    student_record = await db.student_records.find_one({
+        "email": student_email,
+        "student_number": student_number,
+    })
+    if not student_record:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student not found. Check your email and student number.",
+        )
+    if course_oid not in student_record.get("course_ids", []):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not enrolled in this course.",
+        )
+
+    # 3. Check resubmission policy
     assignment = await db.assignments.find_one({"_id": assignment_oid})
     if not assignment:
         raise HTTPException(
