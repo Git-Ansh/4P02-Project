@@ -1,207 +1,204 @@
-# Academic FBI — Academic Integrity Submission and Similarity Analysis System
+# Academic FBI - Source Code Similarity Analysis Platform
 
-A web-based source-code similarity analysis platform for academic integrity. Instructors upload student code submissions and compare them — against each other and against historical repositories — to identify potential plagiarism. The system supports C, C++, and Java, uses a custom-built analysis engine (no external AI services), and anonymizes all student data to comply with FIPPA.
+A web-based plagiarism detection system for academic code submissions. Instructors upload student code (C, C++, Java), run similarity analysis against classmates and historical repositories, and review flagged pairs in a side-by-side diff viewer. All student identity is encrypted and anonymized.
 
-## Team
+**Live System:** https://academicfbi.vercel.app
 
-COSC 4P02 — Software Engineering II, Brock University, Winter 2026 — Group 20
+## Quick Start (TA / Evaluator Access)
 
-| Name | Role |
-|------|------|
-| Darsh Kurmi | Team Leader |
-| Riya Shah | Team member (Frontend) |
-| Rishi Modi | Team member (Backend) |
-| Rimon Paul | Team member (Backend) |
-| Ansh Shah | Team member (Full Stack) |
-| Manu Saini | Team member (Frontend) |
-| Paril Gabani | Team member (Backend) |
+### 1. Access the System
 
-## User Roles
+Visit **https://academicfbi.vercel.app** and log in with your provided credentials.
 
-| Role | Description |
-|------|-------------|
-| **Student** | Select institution, verify assignment key, upload code submissions, resubmit before deadline |
-| **Instructor** | Manage courses/assignments, manage comparison repositories, run similarity analysis, view/export reports, compare flagged submissions side-by-side |
-| **Administrator** | Manage instructor accounts and courses, configure global system settings, view activity logs |
+### 2. Upload a Test Repository
 
-## Features
+1. Navigate to **Courses** > select a course > select an assignment
+2. Click **References** > **Upload ZIP**
+3. Upload your test repository ZIP (a zip of zipped student submissions, e.g. `TestSet20.zip` containing `StudentA.zip`, `StudentB.zip`, etc.)
+4. Optionally upload **Boilerplate** code files to exclude from analysis
 
-- **Multi-language support** — C, C++, and Java
-- **Repository management** — Compare against current-class submissions, previous offerings, or custom instructor-uploaded repositories
-- **Similarity analysis engine** — Custom in-house pipeline (no external AI); see [Analysis Pipeline](#analysis-pipeline) below
-- **Anonymization** — Tokenized identifiers replace student names throughout analysis and reports
-- **Side-by-side comparison** — Highlighted diff view of flagged submission pairs
-- **Batch analysis** — Process entire assignment submission sets at once
-- **Export & download** — PDF/CSV reports and raw submission downloads
-- **Role-based access control** — Separate permissions for Students, Instructors, and Administrators
+### 3. Run Analysis
 
-## Architecture
+1. On the assignment's **Analysis** page, click **Run Analysis**
+2. Wait for the engine to complete (typically 5-30 seconds depending on submission count)
+3. Results appear as a ranked list of flagged pairs sorted by severity
 
-The system follows a **4-layer architecture** (SRS Section 8.4):
+### 4. Review Results
 
-| Layer | Technology | Responsibility |
-|-------|-----------|----------------|
-| **UI Layer** | Next.js 16 + React 19 | Frontend SPA — dashboard, upload, reports, admin views |
-| **Server Layer** | FastAPI (Python) | REST API — authentication, RBAC, business logic, job orchestration |
-| **Data Layer** | PostgreSQL + file storage | Relational data (users, courses, results) and raw submission files |
-| **Computation Layer** | Background workers | Similarity analysis pipeline — parsing, fingerprinting, comparison |
+- Click any flagged pair to open the **side-by-side diff viewer**
+- Highlighted blocks show matched code regions with confidence levels (HIGH / MEDIUM / LOW)
+- Use the **pairs sidebar** on the left for quick navigation between flagged pairs
+- Use **Prev / Next** buttons to navigate between matched blocks
+- Click **Reveal Identity** to request student name disclosure (requires admin approval)
 
-## Analysis Pipeline
+### 5. Export
 
-Submissions flow through a 7-stage pipeline (SRS Section 8.5):
+- On the submissions page, click **Download All** to export all student submissions as an anonymized ZIP
 
-1. **Input** — Receive uploaded source files
-2. **Parsing** — Language-specific lexing / AST extraction
-3. **Normalization** — Strip comments, normalize identifiers and whitespace
-4. **Feature Extraction** — Extract structural and syntactic features
-5. **Fingerprinting** — Generate hash fingerprints (winnowing / n-gram)
-6. **Similarity Measurement** — Compare fingerprint sets across submissions and repositories
-7. **Result Aggregation** — Produce per-pair similarity scores and flag threshold violations
+---
 
-> **Note:** The comparison engine is developed entirely in-house. No external AI services are used for code comparison.
+## Submission Format
+
+Students submit via the public submission portal:
+
+1. Select university and enter the **assignment key** (token generated by instructor)
+2. Enter student name, email, and student number
+3. Upload source code as a **ZIP file** or individual source files
+4. Student identity is **encrypted** on the server — no plaintext PII is stored visibly
+
+### Repository Format
+
+A repository is a **ZIP of ZIP files**, where each inner ZIP is one student's submission:
+
+```
+TestSet20.zip
+  StudentA.zip
+    Main.java
+    Utils.java
+  StudentB.zip
+    Main.java
+    Utils.java
+  ...
+```
+
+Upload repositories via the **References** button on the analysis page.
+
+### Boilerplate Code
+
+Upload starter/template code files via the **Boilerplate** button. The engine fingerprints these files and excludes matching patterns from similarity scores, preventing false positives from instructor-provided code.
+
+---
+
+## Analysis Engine
+
+The engine uses a multi-stage pipeline with no external AI services:
+
+1. **AST Tokenization** — Tree-sitter parses source into structural tokens (FUNC_DEF, LOOP_START, IF, RETURN, etc.)
+2. **Semantic Enrichment** — Method calls, accumulator patterns, and API usage emit semantic tokens
+3. **Adaptive K-gram Hashing** — K-gram size adapts per file (k=3 for tiny files, up to k=9 for large files)
+4. **Winnowing** — Moss-compliant fingerprint selection with rightmost minimum tie-breaking
+5. **IDF-Weighted Jaccard** — Rare shared patterns weigh more than common structural boilerplate
+6. **Unit-Aware Block Merging** — Matches are grouped by structural units (methods, loops, conditionals)
+7. **Candidate Pair Optimization** — Only pairs sharing at least one hash are compared
+
+Supports **C**, **C++**, and **Java**.
+
+---
 
 ## Technology Stack
 
 | Component | Technology |
 |-----------|------------|
-| Backend | Python 3.10+ / FastAPI |
-| Frontend | Next.js 16 / React 19 / TypeScript |
-| Database | PostgreSQL 14+ |
-| Cache | Redis |
-| Containerization | Docker / Docker Compose |
-| Hosting | OVH VPS |
-| CI/CD | GitHub Actions |
+| Frontend | Next.js 16 / React 19 / TypeScript / Tailwind CSS |
+| Backend | Python 3.11 / FastAPI |
+| Database | MongoDB Atlas |
+| Analysis Engine | Tree-sitter + MurmurHash3 + custom winnowing pipeline |
+| File Encryption | Fernet (AES-128-CBC + HMAC-SHA256) |
+| Hosting | Vercel (frontend) + OVH VPS (backend) |
+| CI/CD | GitHub Actions (test + deploy) |
 
-## Project Structure
+---
 
-```
-4P02-Project/
-├── backend/                     # FastAPI backend
-│   ├── src/
-│   │   ├── api/                 # REST API endpoints
-│   │   ├── analysis/            # Similarity analysis engine
-│   │   │   ├── tokenizer/       # Language-specific tokenizers
-│   │   │   ├── comparator/      # Similarity comparison algorithms
-│   │   │   └── fingerprint/     # Code fingerprinting utilities
-│   │   ├── models/              # Database models
-│   │   ├── services/            # Business logic
-│   │   ├── utils/               # Helper utilities
-│   │   └── config/              # Configuration
-│   ├── tests/                   # Backend tests
-│   └── requirements.txt
-│
-├── frontend/
-│   └── my-app/                  # Next.js frontend
-│       ├── app/                 # App router pages
-│       ├── components/          # UI components
-│       ├── lib/                 # Utilities
-│       ├── public/              # Static assets
-│       └── package.json
-│
-├── database/                    # Database schemas and migrations
-│   ├── migrations/
-│   └── seeds/
-│
-├── repositories/                # Stored code repositories for comparison
-│
-├── docs/                        # Documentation
-│   ├── api/                     # API reference
-│   ├── architecture/            # Architecture overview
-│   └── user-guide/              # User documentation
-│
-├── scripts/                     # Utility scripts
-├── .github/workflows/           # CI/CD pipeline
-├── docker-compose.yml
-├── .env.example
-└── .gitignore
-```
-
-## Getting Started
+## Local Development Setup
 
 ### Prerequisites
 
 - Python 3.10+
 - Node.js 18+
-- PostgreSQL 14+
-- Docker & Docker Compose (recommended)
+- MongoDB Atlas account (or local MongoDB)
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Git-Ansh/4P02-Project.git
-   cd 4P02-Project
-   ```
-
-2. **Set up the backend**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. **Set up the frontend**
-   ```bash
-   cd frontend/my-app
-   npm install
-   ```
-
-4. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-5. **Run the application**
-   ```bash
-   # Backend
-   cd backend
-   uvicorn src.main:app --reload
-
-   # Frontend (separate terminal)
-   cd frontend/my-app
-   npm run dev
-   ```
-
-### Using Docker
+### Backend
 
 ```bash
-docker-compose up --build
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Create .env with required variables:
+cat > .env << 'EOF'
+MONGODB_URI=mongodb+srv://...
+DB_NAME=academic_fbi
+JWT_SECRET=your-secret-key
+UPLOAD_DIR=/opt/academic-fbi/uploads
+EOF
+
+# Start the server
+uvicorn src.main:app --reload --port 8000
 ```
 
-## Privacy & Security
+### Frontend
 
-- **Anonymization** — Student names are replaced with tokenized identifiers before analysis
-- **No code execution** — Uploaded code is never executed; only static analysis is performed
-- **Malware scanning** — Submissions are scanned before processing
-- **RBAC** — Role-based access control restricts data visibility per role
-- **Encryption** — PII is encrypted at rest
-- **FIPPA-compliant** — Data handling follows applicable Canadian privacy regulations
+```bash
+cd frontend/my-app
+npm install
+npm run dev
+```
 
-## API Documentation
+Frontend runs at `http://localhost:3000`, backend API at `http://localhost:8000/docs`.
 
-API documentation is auto-generated by FastAPI and available at `/docs` (Swagger UI) or `/redoc` when the server is running. See also [docs/api](docs/api).
+---
 
 ## Testing
 
 ```bash
-# Backend tests
 cd backend
-pytest
-
-# Frontend tests
-cd frontend/my-app
-npm test
+python -m pytest tests/ -v
 ```
 
-## Contributing
-
-1. Create a feature branch (`git checkout -b feature/amazing-feature`)
-2. Commit your changes (`git commit -m 'Add amazing feature'`)
-3. Push to the branch (`git push origin feature/amazing-feature`)
-4. Open a Pull Request
+188 tests covering all API endpoints, services, and the comparison engine.
 
 ---
 
-This project is developed for academic purposes as part of COSC 4P02 at Brock University and must be deployed in compliance with applicable privacy regulations.
+## Project Structure
+
+```
+4P02-Project/
+  backend/
+    src/
+      api/              # REST API endpoints (instructor, admin, submission)
+      config/           # Settings, database connection
+      models/           # Pydantic schemas
+      services/         # Analysis orchestration, comparison engine
+      utils/            # Encryption, ZIP utilities
+    tests/              # 188 test cases
+    requirements.txt
+
+  frontend/my-app/
+    app/                # Next.js app router pages
+      instructor/       # Dashboard, courses, analysis, submissions
+      admin/            # University admin panel
+      submit/           # Student submission portal
+    components/
+      analysis/         # Code diff viewer, pair list, stats bar
+      ui/               # shadcn/ui components
+    lib/                # API client, types, auth utilities
+
+  .github/workflows/    # CI/CD: test gate + VPS deploy
+```
+
+---
+
+## Privacy and Security
+
+- **Encrypted submissions** — Student files encrypted at rest using Fernet (AES-128-CBC)
+- **Encrypted identity** — Student name and email encrypted in database; student number hashed for folder names
+- **Anonymized analysis** — All analysis results use anonymous labels (Student A, Student B); real names require admin-approved reveal
+- **No code execution** — Only static AST analysis; submitted code is never run
+- **RBAC** — Role-based access: Student, Instructor, Administrator
+
+---
+
+## Team
+
+COSC 4P02 - Software Engineering II, Brock University, Winter 2026 - Group 20
+
+| Name | Role |
+|------|------|
+| Darsh Kurmi | Team Leader |
+| Riya Shah | Frontend |
+| Rishi Modi | Backend |
+| Rimon Paul | Backend |
+| Ansh Shah | Full Stack |
+| Manu Saini | Frontend |
+| Paril Gabani | Backend |
