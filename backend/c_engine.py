@@ -24,7 +24,7 @@ from tree_sitter import Language, Parser
 import tree_sitter_java
 import tree_sitter_cpp
 
-SIMILARITY_THRESHOLD = 0
+SIMILARITY_THRESHOLD = 0.3
 UNIT_MATCH_THRESHOLD = 0.16
 UNIT_MIN_HASHES = 1
 FILE_SIMILARITY_THRESHOLD = 0.90
@@ -37,7 +37,7 @@ ADAPTIVE_K_THRESHOLDS = [
 ]
 ADAPTIVE_K_MAX = 9
 
-MIN_TOKEN_DIVERSITY = 3
+MIN_TOKEN_DIVERSITY = 2
 
 LEXICAL_MAP = {
     "identifier": "ID",
@@ -212,6 +212,8 @@ def _safe_text(node):
 def _emit_call_semantics(node, tokens):
     text = _safe_text(node).lower()
     line = node.start_point[0] + 1
+
+    # Java string/char operations
     if "charat(" in text:
         _append_token(tokens, "CHAR_ACCESS", line)
     if ".append(" in text:
@@ -229,6 +231,16 @@ def _emit_call_semantics(node, tokens):
     if ".length(" in text or text.endswith("length"):
         _append_token(tokens, "LENGTH_ACCESS", line)
 
+    node_type = node.type
+    if node_type in {"subscript_expression", "array_access"}:
+        _append_token(tokens, "INDEX_ACCESS", line)
+
+    if ".get(" in text:
+        _append_token(tokens, "INDEX_ACCESS", line)
+
+    if "(" in text and ")" in text:
+        _append_token(tokens, "CALL_GENERIC", line)
+
 
 def _emit_expr_semantics(node, tokens):
     text = _safe_text(node).lower()
@@ -237,19 +249,44 @@ def _emit_expr_semantics(node, tokens):
 
     if node_type in {"assignment_expression"}:
         if "+=" in text:
-            _append_token(tokens, "ACCUM_APPEND", line)
+            _append_token(tokens, "ACCUM_ADD", line)
         elif "-=" in text:
             _append_token(tokens, "ACCUM_SUB", line)
+
+        if "=" in text and "+" in text:
+            parts = text.split("=")
+            if len(parts) == 2:
+                left = parts[0].strip()
+                right = parts[1].strip()
+                if left and (left in right):
+                    _append_token(tokens, "ACCUM_ADD", line)
+
     elif node_type in {"update_expression"}:
         if "--" in text:
             _append_token(tokens, "DECREMENT", line)
+            _append_token(tokens, "LOOP_STEP", line)
         elif "++" in text:
             _append_token(tokens, "INCREMENT", line)
+            _append_token(tokens, "LOOP_STEP", line)
+
     elif node_type in {"binary_expression"}:
         if "==" in text:
             _append_token(tokens, "EQ_TEST", line)
+
+        if "!=" in text:
+            _append_token(tokens, "NEQ_TEST", line)
+
         if ">=" in text or "<=" in text or " > " in f" {text} " or " < " in f" {text} ":
             _append_token(tokens, "RANGE_TEST", line)
+
+        if "/ 2" in text or ">> 1" in text:
+            if "+" in text or "-" in text:
+                _append_token(tokens, "MID_CALC", line)
+        if "+" in text:
+            _append_token(tokens, "ADD_OP", line)
+        if "-" in text:
+            _append_token(tokens, "SUB_OP", line)
+
     elif node_type in {"local_variable_declaration", "declaration", "variable_declarator"}:
         if "stringbuilder" in text:
             _append_token(tokens, "ACCUM_INIT", line)
@@ -257,6 +294,8 @@ def _emit_expr_semantics(node, tokens):
             _append_token(tokens, "ACCUM_INIT", line)
         if "length() - 1" in text or ".length()-1" in text:
             _append_token(tokens, "REVERSE_INDEX_INIT", line)
+        if "= 0" in text:
+            _append_token(tokens, "INDEX_INIT", line)
     elif node_type in {"object_creation_expression"}:
         if "stringbuilder" in text:
             _append_token(tokens, "ACCUM_INIT", line)
@@ -306,9 +345,29 @@ def normalize_ast(node, tokens):
         _append_token(tokens, "SWITCH_END", node.end_point[0] + 1)
         return
 
-    token_str = LEXICAL_MAP.get(node_type) or STRUCTURAL_MAP.get(node_type)
-    if token_str:
-        _append_token(tokens, token_str, line)
+    if node_type in {"identifier", "field_identifier"}:
+        _append_token(tokens, "VAR", line)
+    elif node_type in {"type_identifier"}:
+        _append_token(tokens, "TYPE", line)
+    elif node_type in {"method_invocation", "call_expression"}:
+        _append_token(tokens, "CALL", line)
+    else:
+        token_str = LEXICAL_MAP.get(node_type) or STRUCTURAL_MAP.get(node_type)
+        if token_str:
+            _append_token(tokens, token_str, line)
+
+    if node_type in {
+        "assignment_expression", "update_expression", "binary_expression",
+        "local_variable_declaration", "declaration", "variable_declarator",
+        "object_creation_expression"
+    }:
+        _emit_expr_semantics(node, tokens)
+
+    if node_type in {
+        "method_invocation", "call_expression",
+        "field_expression", "field_access"
+    }:
+        _emit_call_semantics(node, tokens)
 
     for child in node.children:
         normalize_ast(child, tokens)
@@ -648,7 +707,56 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
 
     w_intersection = sum(idf_weights.get(h, 1.0) for h in intersection_hashes)
     w_union = sum(idf_weights.get(h, 1.0) for h in union_hashes)
-    score = w_intersection / w_union if w_union > 0 else 0.0
+    global_score = w_intersection / w_union if w_union > 0 else 0.0
+
+    avg_idf = (
+        sum(idf_weights.get(h, 1.0) for h in intersection_hashes) / len(intersection_hashes)
+        if intersection_hashes else 0.0
+    )
+
+    file_sims = _file_level_similarity(fp_a, fp_b)
+
+    if file_sims:
+        total_weight = sum(fs["hash_count"] for fs in file_sims)
+        if total_weight > 0:
+            weighted_file_score = sum(fs["similarity"] * fs["hash_count"] for fs in file_sims) / total_weight
+        else:
+            weighted_file_score = 0.0
+    else:
+        weighted_file_score = 0.0
+
+    score = max(global_score, weighted_file_score)
+
+    penalty = 1.0
+
+    if avg_idf < 0.5:
+        penalty *= 0.6
+
+    merged_blocks = group_and_merge_matches(matches)
+    strong_blocks = _strong_blocks(merged_blocks)
+
+    if len(strong_blocks) < 2:
+        penalty *= 0.7
+
+    if strong_blocks:
+        avg_block_size = sum((b["end_a"] - b["start_a"] + 1) for b in strong_blocks) / len(strong_blocks)
+        if avg_block_size < 10:
+            penalty *= 0.8
+
+    unit_types = {b.get("unit_type_a") for b in strong_blocks}
+    if len(unit_types) < 2:
+        penalty *= 0.8
+
+    score *= penalty
+
+    if strong_blocks:
+        total_block_lines = sum((b["end_a"] - b["start_a"] + 1) for b in strong_blocks)
+        coverage = min(1.0, total_block_lines / max(1, len(fp_a)))
+        score = max(score, 0.5 * score + 0.5 * coverage)
+
+    if file_sims and len(file_sims) >= 2:
+        score = min(1.0, score + 0.1)
+
     return score, matches
 
 
@@ -698,15 +806,12 @@ def _reporting_unit_key(match):
                 match["file_a"], match["file_b"],
                 match["loop_start_a"], match["loop_end_a"],
                 match["loop_start_b"], match["loop_end_b"],
-                match.get("method_name_a"), match.get("method_name_b"),
             )
 
     if has_method_a and has_method_b:
         return (
             "METHOD",
             match["file_a"], match["file_b"],
-            match["method_start_a"], match["method_end_a"],
-            match["method_start_b"], match["method_end_b"],
             match.get("method_name_a"), match.get("method_name_b"),
         )
 
@@ -759,9 +864,28 @@ def group_and_merge_matches(matches, min_block_size=3):
 
     merged_blocks = []
     for key, items in grouped.items():
-        unit_type, file_a, file_b, start_a, end_a, start_b, end_b, method_name_a, method_name_b = key
+        unit_type = key[0]
+
+        if unit_type == "LOOP":
+            _, file_a, file_b, start_a, end_a, start_b, end_b = key
+            method_name_a = next((m.get("method_name_a") for m in items if m.get("method_name_a")), None)
+            method_name_b = next((m.get("method_name_b") for m in items if m.get("method_name_b")), None)
+        else:
+            _, file_a, file_b, method_name_a, method_name_b = key
+            start_a = min(m["start_a"] for m in items)
+            end_a   = max(m["end_a"]   for m in items)
+            start_b = min(m["start_b"] for m in items)
+            end_b   = max(m["end_b"]   for m in items)
+
         block_length_a = end_a - start_a + 1
         block_length_b = end_b - start_b + 1
+
+        if block_length_a <= 1 and block_length_b <= 1:
+            continue
+
+        if block_length_a < 3 and block_length_b < 3:
+            continue
+
         if max(block_length_a, block_length_b) < min_block_size:
             continue
 
@@ -786,7 +910,6 @@ def group_and_merge_matches(matches, min_block_size=3):
         )
 
     merged_blocks = _absorb_nested_loops(merged_blocks)
-
     merged_blocks.sort(key=lambda b: (b["file_a"], b["start_a"], b["file_b"], b["start_b"], b["unit_type_a"]))
     return merged_blocks
 
@@ -807,17 +930,6 @@ def _method_context_compatible(block):
     if not same_file:
         return True
 
-    if uta == "METHOD" and utb == "METHOD":
-        na = block.get("unit_name_a")
-        nb = block.get("unit_name_b")
-        if na and nb and not _names_match(na, nb):
-            return False
-
-    pma = block.get("parent_method_name_a")
-    pmb = block.get("parent_method_name_b")
-    if pma and pmb and not _names_match(pma, pmb):
-        return False
-
     return True
 
 
@@ -832,13 +944,13 @@ def _name_score(block):
         if _names_match(na, nb):
             return 0.25
         if na and nb:
-            return -0.35
+            return -0.10  # was -0.35, reduced so renamed functions aren't killed by scoring
     pma = block.get("parent_method_name_a")
     pmb = block.get("parent_method_name_b")
     if _names_match(pma, pmb):
         return 0.12
     if pma and pmb:
-        return -0.25
+        return -0.10  # was -0.25
     return 0.0
 
 
@@ -932,14 +1044,35 @@ def _select_one_to_one_blocks(blocks):
     return selected
 
 
+def _remove_contained_blocks(blocks):
+    result = []
+    for i, b in enumerate(blocks):
+        contained = False
+        for j, other in enumerate(blocks):
+            if i == j:
+                continue
+            if (other["file_a"] == b["file_a"] and
+                    other["file_b"] == b["file_b"] and
+                    other["start_a"] <= b["start_a"] and
+                    other["end_a"] >= b["end_a"] and
+                    other["start_b"] <= b["start_b"] and
+                    other["end_b"] >= b["end_b"] and
+                    other["hash_count"] >= b["hash_count"]):
+                contained = True
+                break
+        if not contained:
+            result.append(b)
+    return result
+
+
 def _strong_blocks(merged_blocks):
     strong = []
     for block in merged_blocks:
         unit_a = block.get("unit_type_a")
         unit_b = block.get("unit_type_b")
-        if unit_a and unit_a != "RAW" and not _is_reportable_unit(unit_a):
+        if unit_a and unit_a not in {"RAW", "FILE"} and not _is_reportable_unit(unit_a):
             continue
-        if unit_b and unit_b != "RAW" and not _is_reportable_unit(unit_b):
+        if unit_b and unit_b not in {"RAW", "FILE"} and not _is_reportable_unit(unit_b):
             continue
         if unit_a and unit_b and not _compatible_units(
                 {"file": block["file_a"], "unit_type": unit_a},
@@ -961,7 +1094,8 @@ def _strong_blocks(merged_blocks):
             density_threshold = max(0.14, UNIT_MATCH_THRESHOLD - 0.03)
 
         if density < density_threshold:
-            continue
+            if block["hash_count"] < 3:
+                continue
 
         strong.append({
             **block,
@@ -969,7 +1103,6 @@ def _strong_blocks(merged_blocks):
             "block_length_a": block_length_a,
             "block_length_b": block_length_b,
         })
-    strong = _select_one_to_one_blocks(strong)
     strong.sort(
         key=lambda b: (
             _candidate_assignment_score(b),
@@ -1014,9 +1147,14 @@ def should_flag_pair(score, raw_matches):
 def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=None):
     merged_blocks = group_and_merge_matches(raw_matches)
     strong = _strong_blocks(merged_blocks)
+    strong = _select_one_to_one_blocks(strong)
+    strong = _remove_contained_blocks(strong)
 
     if score >= SIMILARITY_THRESHOLD:
-        selected_blocks = strong[:12]
+        if score > 0.95:
+            selected_blocks = strong  # show ALL blocks for near-identical submissions
+        else:
+            selected_blocks = strong[:12]
         if not selected_blocks:
             fallback = []
             for block in merged_blocks:
@@ -1037,7 +1175,10 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
             fallback.sort(key=lambda b: (b["density"], b["hash_count"]), reverse=True)
             selected_blocks = fallback[:8]
     else:
-        selected_blocks = strong[:12]
+        if score > 0.95:
+            selected_blocks = strong
+        else:
+            selected_blocks = strong[:12]
 
     structured_blocks = []
     highlight_map = {s1: {}, s2: {}}
@@ -1047,65 +1188,8 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
     density_sum = 0.0
 
     file_level_files = set()
-    if fp_a and fp_b:
-        for fs in _file_level_similarity(fp_a, fp_b):
-            if fs["similarity"] >= FILE_SIMILARITY_THRESHOLD:
-                fname = os.path.basename(fs["file_a"])
-                file_level_files.add(fname)
-                fname_b = os.path.basename(fs["file_b"])
-                matches_for_file = [
-                    m for m in raw_matches
-                    if os.path.basename(m["file_a"]).lower() == fname.lower()
-                       and os.path.basename(m["file_b"]).lower() == fname_b.lower()
-                ]
-                if matches_for_file:
-                    start_a = 1
-                    start_b = 1
-                    end_a = max(m["end_a"] for m in matches_for_file)
-                    end_b = max(m["end_b"] for m in matches_for_file)
-                else:
-                    start_a = start_b = 1
-                    end_a = end_b = 1
-                block_length_a = end_a - start_a + 1
-                block_length_b = end_b - start_b + 1
-                density_sum += fs["similarity"]
-                total_lines_a += block_length_a
-                total_lines_b += block_length_b
-                high_conf_blocks += 1
-                idx = len(structured_blocks) + 1
-                structured_blocks.append({
-                    "block_id": idx,
-                    "file_a": fs["file_a"],
-                    "file_b": fs["file_b"],
-                    "start_a": start_a,
-                    "end_a": end_a,
-                    "start_b": start_b,
-                    "end_b": end_b,
-                    "block_length_a": block_length_a,
-                    "block_length_b": block_length_b,
-                    "density": fs["similarity"],
-                    "confidence": "HIGH",
-                    "unit_type_a": "FILE",
-                    "unit_type_b": "FILE",
-                    "unit_name_a": fname,
-                    "unit_name_b": fname,
-                })
-                highlight_map[s1].setdefault(fs["file_a"], []).append({
-                    "block_id": idx,
-                    "start": start_a,
-                    "end": end_a,
-                    "unit_type": "FILE",
-                })
-                highlight_map[s2].setdefault(fs["file_b"], []).append({
-                    "block_id": idx,
-                    "start": start_b,
-                    "end": end_b,
-                    "unit_type": "FILE",
-                })
 
     for block in selected_blocks:
-        if os.path.basename(block.get("file_a", "")).lower() in {f.lower() for f in file_level_files}:
-            continue
         idx = len(structured_blocks) + 1
         block_length_a, block_length_b, density = _compute_block_density(block)
 
@@ -1127,6 +1211,11 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
             high_conf_blocks += 1
         elif density >= med_thresh:
             confidence = "MEDIUM"
+
+        if score > 0.95:
+            if confidence != "HIGH":
+                confidence = "HIGH"
+                high_conf_blocks += 1
 
         density_sum += density
         total_lines_a += block_length_a
@@ -1171,7 +1260,10 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
 
     n = len(structured_blocks)
     avg_density = density_sum / n if n else 0.0
-    severity_score = score * 0.45 + avg_density * 0.35 + (high_conf_blocks / n * 0.2 if n else 0.0)
+    severity_score = score * 0.6 + avg_density * 0.25 + (high_conf_blocks / n * 0.15 if n else 0.0)
+
+    if score < SIMILARITY_THRESHOLD and not structured_blocks:
+        return None
 
     sources = {s1: {}, s2: {}}
     for sid in (s1, s2):
@@ -1300,17 +1392,18 @@ def run_engine(submissions_folder, template_folder=None, parallel=True, save_for
                 clean_pair = build_pair_object(s1, s2, score, matches, source_cache,
                                                fp_a=fingerprint_db[s1],
                                                fp_b=fingerprint_db[s2])
-                flagged_pairs.append(clean_pair)
-                if save_forensic:
-                    forensic_results.append(
-                        {
-                            "student_1": s1,
-                            "student_2": s2,
-                            "similarity": round(score, 4),
-                            "raw_match_count": len(matches),
-                            "raw_matches": matches,
-                        }
-                    )
+                if clean_pair:
+                    flagged_pairs.append(clean_pair)
+                    if save_forensic:
+                        forensic_results.append(
+                            {
+                                "student_1": s1,
+                                "student_2": s2,
+                                "similarity": round(score, 4),
+                                "raw_match_count": len(matches),
+                                "raw_matches": matches,
+                            }
+                        )
 
     if save_forensic:
         forensic_path = os.path.join(base_dir, "forensic_report.json")
@@ -1342,7 +1435,7 @@ def run_engine(submissions_folder, template_folder=None, parallel=True, save_for
 
 if __name__ == "__main__":
     SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-    SUBMISSION_DIR = os.path.join(SCRIPT_DIR, "submissions")
+    SUBMISSION_DIR = os.path.join(SCRIPT_DIR, "../backend/submissions")
     TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
     TEMPLATE_DIR = TEMPLATE_DIR if os.path.exists(TEMPLATE_DIR) else None
 
