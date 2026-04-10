@@ -30,7 +30,7 @@ FILE_SIMILARITY_THRESHOLD = 0.90
 
 ADAPTIVE_K_THRESHOLDS = [
     (30, 3),
-    (80, 4),
+    (60, 4),
     (200, 5),
     (500, 7),
 ]
@@ -39,38 +39,54 @@ ADAPTIVE_K_MAX = 9
 MIN_TOKEN_DIVERSITY = 3
 
 LEXICAL_MAP = {
+    # --- Java ---
     "identifier": "ID",
     "field_identifier": "ID",
     "type_identifier": "TYPE",
     "decimal_integer_literal": "NUM",
     "hex_integer_literal": "NUM",
-    "number_literal": "NUM",
+    "number_literal": "NUM",          # C/C++
     "floating_point_literal": "NUM",
     "string_literal": "STR",
-    "character_literal": "STR",
+    "character_literal": "STR",       # Java char literal
+    "char_literal": "STR",            # C/C++ char literal
     "true": "BOOL",
     "false": "BOOL",
-    "null_literal": "NULL",
+    "null_literal": "NULL",           # Java null
+    "null": "NULL",                   # C++ nullptr
+    "primitive_type": "TYPE",         # C++ int, float, char, void, etc.
+    "auto": "TYPE",                   # C++ auto
 }
 
 STRUCTURAL_MAP = {
     "return_statement": "RETURN",
-    "method_declaration": "FUNC_DEF",
-    "function_definition": "FUNC_DEF",
-    "constructor_declaration": "FUNC_DEF",
+    "method_declaration": "FUNC_DEF",       # Java
+    "function_definition": "FUNC_DEF",      # C/C++
+    "constructor_declaration": "FUNC_DEF",  # Java
     "assignment_expression": "ASSIGN",
     "binary_expression": "BIN_OP",
     "update_expression": "UPDATE",
-    "variable_declarator": "VAR_DECL",
-    "local_variable_declaration": "VAR_DECL",
-    "declaration": "VAR_DECL",
-    "array_access": "INDEX",
-    "method_invocation": "CALL",
-    "call_expression": "CALL",
-    "object_creation_expression": "NEW",
+    "variable_declarator": "VAR_DECL",      # Java
+    "local_variable_declaration": "VAR_DECL",# Java
+    "declaration": "VAR_DECL",              # C/C++
+    "init_declarator": "VAR_DECL",          # C/C++ (int x = 0)
+    "array_access": "INDEX",                # Java
+    "subscript_expression": "INDEX",        # C/C++
+    "method_invocation": "CALL",            # Java
+    "call_expression": "CALL",              # C/C++
+    "object_creation_expression": "NEW",    # Java (new Foo())
+    "new_expression": "NEW",                # C++ (new int(42))
+    "delete_expression": "DELETE",          # C++
+    "conditional_expression": "TERNARY",    # C/C++ (a ? b : c)
+    "unary_expression": "UNARY",            # C/C++ (-x, !x, *p, &x)
+    "field_expression": "FIELD_ACCESS",     # C/C++ (obj.member, ptr->member)
+    "throw_statement": "THROW",             # C/C++
+    "break_statement": "BREAK",             # C/C++
+    "lambda_expression": "LAMBDA",          # C++
 }
 
 IGNORE_NODE_TYPES = {
+    # --- Shared / Java ---
     "comment",
     "line_comment",
     "block_comment",
@@ -81,19 +97,56 @@ IGNORE_NODE_TYPES = {
     "formal_parameters",
     "argument_list",
     "translation_unit",
+    # --- C/C++ ---
+    "condition_clause",
+    "else_clause",
+    "field_declaration_list",
+    "field_declaration",
+    "template_declaration",
+    "preproc_include",
+    "using_declaration",
+    "parameter_list",
+    "parameter_declaration",
+    "placeholder_type_specifier",
+    "subscript_argument_list",
+    "access_specifier",
+    "type_qualifier",
+    "storage_class_specifier",
+    "template_parameter_list",
+    "template_argument_list",
+    "type_descriptor",
+    "type_parameter_declaration",
+    "field_initializer_list",
+    "field_initializer",
+    "catch_clause",
+    "try_statement",
+    "reference_declarator",
+    "pointer_declarator",
+    "function_declarator",
+    "abstract_function_declarator",
+    "lambda_capture_specifier",
+    "initializer_list",
+    "system_lib_string",
+    "string_content",
+    "destructor_name",
+    "operator_name",
+    "template_type",
 }
 
 STRUCTURE_TYPES = {
-    "method_declaration": "METHOD",
-    "constructor_declaration": "METHOD",
-    "function_definition": "METHOD",
+    "method_declaration": "METHOD",         # Java
+    "constructor_declaration": "METHOD",    # Java
+    "function_definition": "METHOD",        # C/C++
     "for_statement": "LOOP",
-    "enhanced_for_statement": "LOOP",
+    "enhanced_for_statement": "LOOP",       # Java
+    "for_range_loop": "LOOP",              # C++ (for auto& x : v)
     "while_statement": "LOOP",
     "do_statement": "LOOP",
     "if_statement": "IF",
-    "switch_expression": "SWITCH",
-    "switch_statement": "SWITCH",
+    "switch_expression": "SWITCH",          # Java
+    "switch_statement": "SWITCH",           # C/C++
+    "class_specifier": "CLASS",             # C++
+    "struct_specifier": "CLASS",            # C++
 }
 
 UNIT_PRIORITY = {
@@ -108,9 +161,12 @@ JAVA_LANG = Language(tree_sitter_java.language())
 CPP_LANG = Language(tree_sitter_cpp.language())
 
 
-LOOP_TYPES = {"for_statement", "enhanced_for_statement", "while_statement", "do_statement"}
+LOOP_TYPES = {
+    "for_statement", "enhanced_for_statement", "while_statement", "do_statement",
+    "for_range_loop",
+}
 METHOD_TYPES = {"method_declaration", "constructor_declaration", "function_definition"}
-CLASS_TYPES = set()
+CLASS_TYPES = {"class_specifier", "struct_specifier"}
 IF_TYPES = {"if_statement"}
 SWITCH_TYPES = {"switch_expression", "switch_statement"}
 BODY_FIELD_CANDIDATES = ("body", "consequence", "alternative")
@@ -139,14 +195,13 @@ def _is_reportable_unit(unit_type):
     return unit_type in {"METHOD", "LOOP", "IF", "SWITCH"}
 
 
-
 def get_parser(extension):
     parser = Parser()
     try:
         if extension == ".java":
             parser.language = JAVA_LANG
             return parser
-        if extension in {".cpp", ".c", ".cc", ".h", ".hpp"}:
+        if extension in {".cpp", ".c", ".cc", ".h", ".hpp", ".cxx", ".hxx", ".C"}:
             parser.language = CPP_LANG
             return parser
     except Exception:
@@ -154,15 +209,12 @@ def get_parser(extension):
     return None
 
 
-
 def _append_token(tokens, token_str, line):
     tokens.append({"t": token_str, "line": line})
 
 
-
 def _iter_named_children(node):
     return [child for child in node.children if getattr(child, "is_named", False)]
-
 
 
 def _get_body_children(node):
@@ -192,10 +244,26 @@ def _get_body_children(node):
 def _extract_unit_name(node):
     try:
         if node.type in METHOD_TYPES:
-            for field in ("name", "declarator"):
-                child = node.child_by_field_name(field)
-                if child is not None:
-                    return child.text.decode("utf-8", errors="ignore")
+            name_child = node.child_by_field_name("name")
+            if name_child is not None:
+                return name_child.text.decode("utf-8", errors="ignore")
+
+            decl = node.child_by_field_name("declarator")
+            if decl is not None:
+                if decl.type == "function_declarator":
+                    inner = decl.child_by_field_name("declarator")
+                    if inner is not None:
+                        name_text = inner.text.decode("utf-8", errors="ignore")
+                        if "::" in name_text:
+                            name_text = name_text.rsplit("::", 1)[-1]
+                        name_text = name_text.lstrip("~")
+                        return name_text
+                    for child in decl.children:
+                        if child.type in {"identifier", "field_identifier"}:
+                            return child.text.decode("utf-8", errors="ignore")
+                if decl.type in {"identifier", "field_identifier"}:
+                    return decl.text.decode("utf-8", errors="ignore")
+
             for child in node.children:
                 if child.type in {"identifier", "field_identifier", "type_identifier"}:
                     return child.text.decode("utf-8", errors="ignore")
@@ -216,7 +284,7 @@ def _emit_call_semantics(node, tokens):
     line = node.start_point[0] + 1
     if "charat(" in text:
         _append_token(tokens, "CHAR_ACCESS", line)
-    if ".append(" in text:
+    if ".append(" in text or ".push_back(" in text:
         _append_token(tokens, "ACCUM_APPEND", line)
     if ".equals(" in text:
         _append_token(tokens, "EQUALS_CALL", line)
@@ -224,12 +292,40 @@ def _emit_call_semantics(node, tokens):
         _append_token(tokens, "REPLACE_CALL", line)
     if ".tochararray(" in text:
         _append_token(tokens, "TO_CHAR_ARRAY", line)
-    if ".tolowercase(" in text:
+    if ".tolowercase(" in text or "tolower(" in text:
         _append_token(tokens, "TO_LOWER", line)
-    if ".tostring(" in text:
+    if ".touppercase(" in text or "toupper(" in text:
+        _append_token(tokens, "TO_UPPER", line)
+    if ".tostring(" in text or "to_string(" in text or "std::to_string(" in text:
         _append_token(tokens, "TO_STRING", line)
     if ".length(" in text or text.endswith("length"):
         _append_token(tokens, "LENGTH_ACCESS", line)
+    if ".size()" in text:
+        _append_token(tokens, "LENGTH_ACCESS", line)
+    if ".find(" in text:
+        _append_token(tokens, "FIND_CALL", line)
+    if ".insert(" in text:
+        _append_token(tokens, "INSERT_CALL", line)
+    if ".erase(" in text:
+        _append_token(tokens, "ERASE_CALL", line)
+    if ".begin(" in text or ".end(" in text:
+        _append_token(tokens, "ITER_ACCESS", line)
+    if ".front(" in text or ".back(" in text:
+        _append_token(tokens, "ENDPOINT_ACCESS", line)
+    if ".empty(" in text:
+        _append_token(tokens, "EMPTY_CHECK", line)
+    if ".substr(" in text or ".substring(" in text:
+        _append_token(tokens, "SUBSTR_CALL", line)
+    if "sort(" in text:
+        _append_token(tokens, "SORT_CALL", line)
+    if "reverse(" in text:
+        _append_token(tokens, "REVERSE_CALL", line)
+    if "swap(" in text:
+        _append_token(tokens, "SWAP_CALL", line)
+    if "cout" in text or "printf(" in text or "println(" in text:
+        _append_token(tokens, "PRINT_CALL", line)
+    if "cin" in text or "scanf(" in text or "getline(" in text:
+        _append_token(tokens, "INPUT_CALL", line)
 
 
 def _emit_expr_semantics(node, tokens):
@@ -252,16 +348,33 @@ def _emit_expr_semantics(node, tokens):
             _append_token(tokens, "EQ_TEST", line)
         if ">=" in text or "<=" in text or " > " in f" {text} " or " < " in f" {text} ":
             _append_token(tokens, "RANGE_TEST", line)
-    elif node_type in {"local_variable_declaration", "declaration", "variable_declarator"}:
-        if "stringbuilder" in text:
+        if "[" in text and "]" in text:
+            _append_token(tokens, "ARRAY_READ", line)
+    elif node_type in {"local_variable_declaration", "declaration", "variable_declarator", "init_declarator"}:
+        if "stringbuilder" in text or "stringstream" in text or "ostringstream" in text:
             _append_token(tokens, "ACCUM_INIT", line)
-        if "= \"\"" in text or "=''" in text:
+        if "= \"\"" in text or "=''" in text or '= ""' in text:
             _append_token(tokens, "ACCUM_INIT", line)
         if "length() - 1" in text or ".length()-1" in text:
             _append_token(tokens, "REVERSE_INDEX_INIT", line)
-    elif node_type in {"object_creation_expression"}:
+        if "= 0" in text or "=0" in text:
+            _append_token(tokens, "INIT_ZERO", line)
+        if ".size() - 1" in text or ".size()-1" in text or "- 1" in text:
+            _append_token(tokens, "INIT_HIGH", line)
+        if "vector" in text or "array" in text:
+            _append_token(tokens, "CONTAINER_INIT", line)
+        if "map" in text or "unordered_map" in text or "hashmap" in text:
+            _append_token(tokens, "MAP_INIT", line)
+        if "set" in text or "unordered_set" in text:
+            _append_token(tokens, "SET_INIT", line)
+    elif node_type in {"object_creation_expression", "new_expression"}:
         if "stringbuilder" in text:
             _append_token(tokens, "ACCUM_INIT", line)
+    elif node_type in {"subscript_expression", "array_access"}:
+        _append_token(tokens, "ARRAY_READ", line)
+    elif node_type in {"conditional_expression"}:
+        _append_token(tokens, "TERNARY_EXPR", line)
+
 
 def normalize_ast(node, tokens):
     node_type = node.type
@@ -311,20 +424,42 @@ def normalize_ast(node, tokens):
     if token_str:
         _append_token(tokens, token_str, line)
 
+    if node_type in {
+        "assignment_expression", "update_expression", "binary_expression",
+        "local_variable_declaration", "declaration", "variable_declarator",
+        "object_creation_expression", "subscript_expression", "array_access",
+        "init_declarator",
+        "new_expression",
+        "conditional_expression",
+    }:
+        _emit_expr_semantics(node, tokens)
+    elif node_type in {"method_invocation", "call_expression"}:
+        _emit_call_semantics(node, tokens)
+
     for child in node.children:
         normalize_ast(child, tokens)
-
 
 
 def collect_structural_spans(node, spans):
     unit_type = STRUCTURE_TYPES.get(node.type)
     if unit_type:
+        loop_subtype = None
+        if unit_type == "LOOP":
+            if node.type in {"for_statement", "enhanced_for_statement"}:
+                loop_subtype = "for"
+            elif node.type == "for_range_loop":
+                loop_subtype = "range_for"
+            elif node.type == "while_statement":
+                loop_subtype = "while"
+            elif node.type == "do_statement":
+                loop_subtype = "do_while"
         spans.append(
             {
                 "type": unit_type,
                 "start": node.start_point[0] + 1,
                 "end": node.end_point[0] + 1,
                 "name": _extract_unit_name(node),
+                "loop_subtype": loop_subtype,
             }
         )
 
@@ -332,11 +467,9 @@ def collect_structural_spans(node, spans):
         collect_structural_spans(child, spans)
 
 
-
 def _span_sort_key(span):
     length = span["end"] - span["start"] + 1
     return (UNIT_PRIORITY.get(span["type"], 999), length, span["start"], span["end"])
-
 
 
 def find_enclosing_unit(start_line, end_line, spans):
@@ -356,9 +489,8 @@ def find_enclosing_unit_of_type(start_line, end_line, spans, allowed_types):
     return min(candidates, key=lambda s: (s["end"] - s["start"] + 1, s["start"], s["end"]))
 
 
-
 def normalize_package(directory_path, student_id):
-    valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp"}
+    valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp", ".cxx", ".hxx", ".C"}
     files = []
 
     for root, _, filenames in os.walk(directory_path):
@@ -388,7 +520,7 @@ def normalize_package(directory_path, student_id):
             collect_structural_spans(tree.root_node, file_spans)
             file_spans.sort(key=_span_sort_key)
 
-            rel_path = os.path.basename(path)
+            rel_path = os.path.relpath(path, directory_path).replace("\\", "/")
             for tok in file_tokens:
                 tok["file"] = rel_path
                 tok["student"] = student_id
@@ -400,8 +532,10 @@ def normalize_package(directory_path, student_id):
     return file_data
 
 
-
 def kgrams(tokens, k, spans):
+    total_tokens = len(tokens)
+    min_diversity = 2 if total_tokens < 60 else MIN_TOKEN_DIVERSITY
+
     grams = []
     for i in range(len(tokens) - k + 1):
         window = tokens[i : i + k]
@@ -410,7 +544,7 @@ def kgrams(tokens, k, spans):
             continue
 
         token_types = {t["t"] for t in window}
-        if len(token_types) < MIN_TOKEN_DIVERSITY:
+        if len(token_types) < min_diversity:
             continue
 
         start_line = window[0]["line"]
@@ -432,6 +566,7 @@ def kgrams(tokens, k, spans):
             "unit_name": unit.get("name") if unit else None,
             "loop_start": loop_unit["start"] if loop_unit else None,
             "loop_end": loop_unit["end"] if loop_unit else None,
+            "loop_subtype": loop_unit.get("loop_subtype") if loop_unit else None,
             "method_start": method_unit["start"] if method_unit else None,
             "method_end": method_unit["end"] if method_unit else None,
             "method_name": method_unit.get("name") if method_unit else None,
@@ -440,14 +575,12 @@ def kgrams(tokens, k, spans):
     return grams
 
 
-
 def hash_kgrams(kgrams_list):
     hashed_list = []
     for content_str, meta in kgrams_list:
         meta["hash"] = stable_hash128(content_str)
         hashed_list.append(meta)
     return hashed_list
-
 
 
 def winnow(hashed_grams, w):
@@ -476,7 +609,6 @@ def winnow(hashed_grams, w):
     return fingerprints
 
 
-
 def _load_zip_source_cache(zip_path):
     cache = {}
     try:
@@ -491,12 +623,10 @@ def _load_zip_source_cache(zip_path):
     return cache
 
 
-
 def _strip_comments(source: str) -> str:
     source = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), source, flags=re.DOTALL)
     source = re.sub(r"//[^\n]*", "", source)
     return source
-
 
 
 def _lookup_source(source_cache, student_id, internal_path):
@@ -509,7 +639,6 @@ def _lookup_source(source_cache, student_id, internal_path):
         if normalized.endswith(target):
             return _strip_comments(content)
     return ""
-
 
 
 def process_zip_submission(zip_path, extract_root):
@@ -542,16 +671,14 @@ def process_zip_submission(zip_path, extract_root):
         return student_id, [], {}
 
 
-
 def load_boilerplate_hashes(template_dir):
     if not os.path.exists(template_dir) or not os.listdir(template_dir):
-        print("No template directory found — skipping boilerplate detection.")
         return set()
 
-    print(f"Loading boilerplate from: {template_dir}")
     file_data = normalize_package(template_dir, "TEMPLATE")
 
     all_fps = []
+    all_raw = []
     for file_info in file_data:
         tokens = file_info["tokens"]
         spans = file_info["spans"]
@@ -560,11 +687,9 @@ def load_boilerplate_hashes(template_dir):
         hashed = hash_kgrams(grams)
         fps = winnow(hashed, w=adaptive_window(len(tokens)))
         all_fps.extend(fps)
+        all_raw.extend(hashed)
 
-    ignored_hashes = {fp["hash"] for fp in all_fps}
-    print(f"Boilerplate fingerprints loaded: {len(ignored_hashes)} hashes will be ignored.")
-    return ignored_hashes
-
+    return {fp["hash"] for fp in all_fps} | {fp["hash"] for fp in all_raw}
 
 
 def build_inverted_index(fingerprint_db):
@@ -578,7 +703,6 @@ def build_inverted_index(fingerprint_db):
     return inverted
 
 
-
 def candidate_pairs_from_index(inverted_index):
     candidates = set()
     for students in inverted_index.values():
@@ -588,14 +712,12 @@ def candidate_pairs_from_index(inverted_index):
     return candidates
 
 
-
 def build_idf_weights(inverted_index, total_students):
     weights = {}
     for h, students in inverted_index.items():
         doc_freq = len(students)
         weights[h] = 1.0 / math.log(1 + doc_freq)
     return weights
-
 
 
 def _compatible_units(fa, fb):
@@ -641,6 +763,7 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
                         "unit_name_a": fa.get("unit_name"),
                         "loop_start_a": fa.get("loop_start"),
                         "loop_end_a": fa.get("loop_end"),
+                        "loop_subtype_a": fa.get("loop_subtype"),
                         "method_start_a": fa.get("method_start"),
                         "method_end_a": fa.get("method_end"),
                         "method_name_a": fa.get("method_name"),
@@ -653,6 +776,7 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
                         "unit_name_b": fb.get("unit_name"),
                         "loop_start_b": fb.get("loop_start"),
                         "loop_end_b": fb.get("loop_end"),
+                        "loop_subtype_b": fb.get("loop_subtype"),
                         "method_start_b": fb.get("method_start"),
                         "method_end_b": fb.get("method_end"),
                         "method_name_b": fb.get("method_name"),
@@ -760,6 +884,8 @@ def _absorb_nested_loops(merged_blocks):
                 mb["end_a"] = max(mb["end_a"], lb["end_a"])
                 mb["start_b"] = min(mb["start_b"], lb["start_b"])
                 mb["end_b"] = max(mb["end_b"], lb["end_b"])
+                mb.setdefault("loop_subtypes_a", set()).update(lb.get("loop_subtypes_a", set()))
+                mb.setdefault("loop_subtypes_b", set()).update(lb.get("loop_subtypes_b", set()))
                 absorbed_indices.add(li)
                 break
 
@@ -784,6 +910,8 @@ def group_and_merge_matches(matches, min_block_size=3):
             continue
 
         unique_hashes = {item["hash"] for item in items}
+        loop_subtypes_a = {item.get("loop_subtype_a") for item in items} - {None}
+        loop_subtypes_b = {item.get("loop_subtype_b") for item in items} - {None}
         merged_blocks.append(
             {
                 "file_a": file_a,
@@ -800,14 +928,14 @@ def group_and_merge_matches(matches, min_block_size=3):
                 "unit_name_b": method_name_b if unit_type == "METHOD" else None,
                 "parent_method_name_a": method_name_a,
                 "parent_method_name_b": method_name_b,
+                "loop_subtypes_a": loop_subtypes_a,
+                "loop_subtypes_b": loop_subtypes_b,
             }
         )
 
     merged_blocks = _absorb_nested_loops(merged_blocks)
-
     merged_blocks.sort(key=lambda b: (b["file_a"], b["start_a"], b["file_b"], b["start_b"], b["unit_type_a"]))
     return merged_blocks
-
 
 
 def _names_match(a, b):
@@ -830,12 +958,16 @@ def _method_context_compatible(block):
         na = block.get("unit_name_a")
         nb = block.get("unit_name_b")
         if na and nb and not _names_match(na, nb):
-            return False
+            density = block.get("density", 0)
+            if density < 0.35:
+                return False
 
     pma = block.get("parent_method_name_a")
     pmb = block.get("parent_method_name_b")
     if pma and pmb and not _names_match(pma, pmb):
-        return False
+        density = block.get("density", 0)
+        if density < 0.35:
+            return False
 
     return True
 
@@ -851,7 +983,7 @@ def _name_score(block):
         if _names_match(na, nb):
             return 0.25
         if na and nb:
-            return -0.35
+            return -0.15
     pma = block.get("parent_method_name_a")
     pmb = block.get("parent_method_name_b")
     if _names_match(pma, pmb):
@@ -860,13 +992,13 @@ def _name_score(block):
         return -0.25
     return 0.0
 
+
 def _compute_block_density(block):
     block_length_a = block["end_a"] - block["start_a"] + 1
     block_length_b = block["end_b"] - block["start_b"] + 1
     denom = max(block_length_a, block_length_b)
     density = block["hash_count"] / denom if denom > 0 else 0.0
     return block_length_a, block_length_b, density
-
 
 
 def _min_hashes_for_block(block_length_a, block_length_b):
@@ -889,7 +1021,6 @@ def _candidate_assignment_score(block):
         + _name_score(block)
         + min(block["hash_count"], 6) * 0.005
     )
-
 
 
 def _select_one_to_one_blocks(blocks):
@@ -971,7 +1102,9 @@ def _strong_blocks(merged_blocks):
         min_hashes = _min_hashes_for_block(block_length_a, block_length_b)
         if block["hash_count"] < min_hashes:
             continue
-        if not _method_context_compatible(block):
+
+        block_with_density = {**block, "density": density}
+        if not _method_context_compatible(block_with_density):
             continue
 
         density_threshold = UNIT_MATCH_THRESHOLD
@@ -1031,9 +1164,39 @@ def should_flag_pair(score, raw_matches):
     return False
 
 
+def _file_level_similarity(fp_a, fp_b):
+    files_a = {}
+    files_b = {}
+    for fp in fp_a:
+        files_a.setdefault(fp["file"], set()).add(fp["hash"])
+    for fp in fp_b:
+        files_b.setdefault(fp["file"], set()).add(fp["hash"])
+
+    results = []
+    for fname in files_a:
+        match_key = next(
+            (f for f in files_b if os.path.basename(f).lower() == os.path.basename(fname).lower()),
+            None
+        )
+        if not match_key:
+            continue
+        set_a = files_a[fname]
+        set_b = files_b[match_key]
+        union = set_a | set_b
+        intersection = set_a & set_b
+        if not union:
+            continue
+        similarity = len(intersection) / len(union)
+        results.append({
+            "file_a": fname,
+            "file_b": match_key,
+            "similarity": round(similarity, 3),
+            "hash_count": len(intersection),
+        })
+    return results
+
 
 def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=None):
-
     merged_blocks = group_and_merge_matches(raw_matches)
     strong = _strong_blocks(merged_blocks)
 
@@ -1081,8 +1244,8 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
                 if matches_for_file:
                     start_a = 1
                     start_b = 1
-                    end_a   = max(m["end_a"] for m in matches_for_file)
-                    end_b   = max(m["end_b"] for m in matches_for_file)
+                    end_a = max(m["end_a"] for m in matches_for_file)
+                    end_b = max(m["end_b"] for m in matches_for_file)
                 else:
                     start_a = start_b = 1
                     end_a = end_b = 1
@@ -1133,15 +1296,14 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
         short_block = short_len <= 8
         hash_count = block["hash_count"]
         confidence = "LOW"
-        # Three-tier thresholds based on block length:
-        #   short  (<=8 lines):  HIGH>=0.45 + hash>=4, MEDIUM>=0.30
-        #   medium (9-20 lines): HIGH>=0.65,            MEDIUM>=0.45
-        #   long   (21+ lines):  HIGH>=0.75,            MEDIUM>=0.55
         if short_block:
-            high_thresh, med_thresh = 0.45, 0.30
-            high_hash_ok = hash_count >= 4
+            high_thresh, med_thresh = 0.38, 0.25
+            high_hash_ok = hash_count >= 3
         elif short_len <= 20:
-            high_thresh, med_thresh = 0.65, 0.45
+            high_thresh, med_thresh = 0.50, 0.28
+            high_hash_ok = True
+        elif short_len <= 40:
+            high_thresh, med_thresh = 0.60, 0.35
             high_hash_ok = True
         else:
             high_thresh, med_thresh = 0.75, 0.55
@@ -1151,6 +1313,13 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
             high_conf_blocks += 1
         elif density >= med_thresh:
             confidence = "MEDIUM"
+
+        if confidence == "HIGH":
+            lsa = block.get("loop_subtypes_a", set())
+            lsb = block.get("loop_subtypes_b", set())
+            if lsa and lsb and lsa != lsb:
+                confidence = "MEDIUM"
+                high_conf_blocks -= 1
 
         density_sum += density
         total_lines_a += block_length_a
@@ -1221,37 +1390,6 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
     }
 
 
-def _file_level_similarity(fp_a, fp_b):
-    files_a = {}
-    files_b = {}
-    for fp in fp_a:
-        files_a.setdefault(fp["file"], set()).add(fp["hash"])
-    for fp in fp_b:
-        files_b.setdefault(fp["file"], set()).add(fp["hash"])
-
-    results = []
-    for fname in files_a:
-        match_key = next(
-            (f for f in files_b if os.path.basename(f).lower() == os.path.basename(fname).lower()),
-            None
-        )
-        if not match_key:
-            continue
-        set_a = files_a[fname]
-        set_b = files_b[match_key]
-        union = set_a | set_b
-        intersection = set_a & set_b
-        if not union:
-            continue
-        similarity = len(intersection) / len(union)
-        results.append({
-            "file_a": fname,
-            "file_b": match_key,
-            "similarity": round(similarity, 3),
-            "hash_count": len(intersection),
-        })
-    return results
-
 def run_engine(submissions_folder, boilerplate_folder=None,
                similarity_threshold=0.15, parallel=True):
     """Run the plagiarism detection pipeline.
@@ -1297,6 +1435,12 @@ def run_engine(submissions_folder, boilerplate_folder=None,
     all_ids = list(fingerprint_db.keys())
     real_ids = [s for s in all_ids if not s.startswith("_ref_")]
     ref_ids = [s for s in all_ids if s.startswith("_ref_")]
+
+    # If there are no real student submissions, compare references against each
+    # other (useful for testing or when refs are the only available data).
+    if not real_ids and ref_ids:
+        real_ids = ref_ids
+        ref_ids = []
 
     total_students = len(fingerprint_db)
     inverted_index = build_inverted_index(fingerprint_db)

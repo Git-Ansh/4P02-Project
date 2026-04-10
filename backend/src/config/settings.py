@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DB_NAME: str = "academic_fbi"
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRY_MINUTES: int = 60
+    JWT_EXPIRY_MINUTES: int = 1440  # 24 hours
     UPLOAD_DIR: str = "/opt/academic-fbi/uploads"
 
     # SMTP settings for email receipts (optional — emails silently skip if not set)

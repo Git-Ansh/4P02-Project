@@ -33,6 +33,11 @@ export async function apiFetch<T = unknown>(
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      window.location.href = "/";
+      return null as T;
+    }
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.detail || "Request failed");
   }

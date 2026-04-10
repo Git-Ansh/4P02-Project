@@ -36,6 +36,8 @@ function getLineStyle(confidence: string, focused: boolean) {
   };
 }
 
+const CONFIDENCE_RANK: Record<string, number> = { FILE: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+
 function buildLineMap(
   pair: AnalysisPair,
   studentName: string,
@@ -48,8 +50,13 @@ function buildLineMap(
   for (const fb of fileBlocks) {
     const block = pair.blocks.find((b) => b.block_id === fb.block_id);
     if (!block) continue;
+    const newRank = CONFIDENCE_RANK[block.confidence] ?? 1;
     for (let ln = fb.start; ln <= fb.end; ln++) {
-      map.set(ln, { blockId: fb.block_id, confidence: block.confidence });
+      const existing = map.get(ln);
+      const existingRank = existing ? (CONFIDENCE_RANK[existing.confidence] ?? 1) : 0;
+      if (newRank > existingRank) {
+        map.set(ln, { blockId: fb.block_id, confidence: block.confidence });
+      }
     }
   }
   return map;
@@ -143,7 +150,7 @@ function Panel({
   fileName,
   source,
   lineMap,
-  focusedBlockId,
+  focusedLines,
   onLineClick,
   bodyRef,
 }: {
@@ -151,7 +158,7 @@ function Panel({
   fileName: string;
   source: string;
   lineMap: Map<number, { blockId: number; confidence: string }>;
-  focusedBlockId: number | null;
+  focusedLines: Set<number>;
   onLineClick: (blockId: number) => void;
   bodyRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -167,11 +174,11 @@ function Panel({
           <tbody>
             {codeLines.map(({ ln, text }) => {
               const info = lineMap.get(ln);
-              const focused = info != null && info.blockId === focusedBlockId;
+              const focused = focusedLines.has(ln);
 
               if (!info) {
                 return (
-                  <tr key={ln}>
+                  <tr key={ln} data-focused={focused ? "true" : undefined}>
                     <td className="text-right pr-2 text-primary/20 select-none text-[11px] w-10">{ln}</td>
                     <td className="px-2 whitespace-pre">{text || " "}</td>
                   </tr>
@@ -182,6 +189,7 @@ function Panel({
                 <tr
                   key={ln}
                   data-block={info.blockId}
+                  data-focused={focused ? "true" : undefined}
                   style={getLineStyle(info.confidence, focused)}
                   onClick={() => onLineClick(info.blockId)}
                 >
@@ -209,12 +217,12 @@ export function CodeDiffViewer({
   // activeFile is from student_1's perspective. Find student_2's corresponding
   // file via blocks (cross-filename matching means they can differ).
   const activeFileB = React.useMemo(() => {
-    // First try same name
+    // Try same filename first
     if (pair.sources?.[pair.student_2]?.[activeFile]) return activeFile;
     // Look up from blocks: find a block where file_a === activeFile
     const block = pair.blocks.find((b) => b.file_a === activeFile);
     if (block?.file_b) return block.file_b;
-    // Look up from files highlight map
+    // Fall back: use the only file in student_2's map
     const s2Files = pair.files?.[pair.student_2] ?? {};
     const s2Keys = Object.keys(s2Files);
     if (s2Keys.length === 1) return s2Keys[0];
@@ -227,29 +235,61 @@ export function CodeDiffViewer({
   const srcA = pair.sources?.[pair.student_1]?.[activeFile] ?? "";
   const srcB = pair.sources?.[pair.student_2]?.[activeFileB] ?? "";
 
+  // Build focused line sets from the block's direct line ranges.
+  const focusedLinesA = React.useMemo(() => {
+    const s = new Set<number>();
+    if (focusedBlockId == null) return s;
+    const block = pair.blocks.find((b) => b.block_id === focusedBlockId);
+    if (block) for (let ln = block.start_a; ln <= block.end_a; ln++) s.add(ln);
+    return s;
+  }, [pair, focusedBlockId]);
+
+  const focusedLinesB = React.useMemo(() => {
+    const s = new Set<number>();
+    if (focusedBlockId == null) return s;
+    const block = pair.blocks.find((b) => b.block_id === focusedBlockId);
+    if (block) for (let ln = block.start_b; ln <= block.end_b; ln++) s.add(ln);
+    return s;
+  }, [pair, focusedBlockId]);
+
+  // Pre-compute stripped line lists so the scroll effect can calculate positions
+  // without DOM measurement — each row is exactly 18 px tall (leading-[18px]).
+  const codeLinesA = React.useMemo(() => stripComments(srcA, activeFile), [srcA, activeFile]);
+  const codeLinesB = React.useMemo(() => stripComments(srcB, activeFileB), [srcB, activeFileB]);
+
+  const LINE_HEIGHT = 18;
+
+  React.useEffect(() => {
+    if (focusedBlockId == null) return;
+    const raf = requestAnimationFrame(() => {
+      if (leftRef.current && focusedLinesA.size > 0) {
+        const idx = codeLinesA.findIndex(({ ln }) => focusedLinesA.has(ln));
+        if (idx !== -1) {
+          leftRef.current.scrollTop = Math.max(0, idx * LINE_HEIGHT - leftRef.current.clientHeight * 0.3);
+        }
+      }
+      if (rightRef.current && focusedLinesB.size > 0) {
+        const idx = codeLinesB.findIndex(({ ln }) => focusedLinesB.has(ln));
+        if (idx !== -1) {
+          rightRef.current.scrollTop = Math.max(0, idx * LINE_HEIGHT - rightRef.current.clientHeight * 0.3);
+        }
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedBlockId]);
+
   const handleClick = React.useCallback(
     (blockId: number) => {
       onBlockClick(blockId);
-
-      // Sync-scroll both panels to the clicked block (~20% from top)
-      for (const ref of [leftRef, rightRef]) {
-        const body = ref.current;
-        if (!body) continue;
-        const row = body.querySelector(`[data-block="${blockId}"]`) as HTMLElement | null;
-        if (!row) continue;
-        const bRect = body.getBoundingClientRect();
-        const rRect = row.getBoundingClientRect();
-        const offset = rRect.top - bRect.top + body.scrollTop - bRect.height * 0.2;
-        body.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
-      }
     },
     [onBlockClick],
   );
 
   return (
     <div className="flex gap-1 w-full h-full">
-      <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={leftRef} />
-      <Panel studentName={pair.student_2} fileName={activeFileB} source={srcB} lineMap={lm2} focusedBlockId={focusedBlockId} onLineClick={handleClick} bodyRef={rightRef} />
+      <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedLines={focusedLinesA} onLineClick={handleClick} bodyRef={leftRef} />
+      <Panel studentName={pair.student_2} fileName={activeFileB} source={srcB} lineMap={lm2} focusedLines={focusedLinesB} onLineClick={handleClick} bodyRef={rightRef} />
     </div>
   );
 }
