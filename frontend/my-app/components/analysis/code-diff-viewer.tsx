@@ -12,13 +12,14 @@
  */
 
 import * as React from "react";
-import type { AnalysisPair } from "@/lib/types/analysis";
+import type { AnalysisPair, MatchBlock } from "@/lib/types/analysis";
 
 interface CodeDiffViewerProps {
   pair: AnalysisPair;
   activeFile: string;
   activeFileB: string;
   activeBlockIds: Set<number>;
+  blockFrequency: Map<number, number>;
   focusedBlockId: number | null;
   onBlockClick: (blockId: number) => void;
 }
@@ -149,6 +150,54 @@ function findOutsideString(line: string, needle: string): number {
   return -1;
 }
 
+const CONF_COLOR: Record<string, string> = {
+  HIGH:   "#ff4f4f",
+  MEDIUM: "#f5c542",
+  LOW:    "#5b8dee",
+  FILE:   "#ff4f4f",
+};
+
+function BlockTooltip({ block, x, y, pairCount }: { block: MatchBlock; x: number; y: number; pairCount: number }) {
+  const color = CONF_COLOR[block.confidence] ?? CONF_COLOR.LOW;
+  const densityPct = Math.round(block.density * 100);
+  const lenA = block.block_length_a ?? block.block_length ?? (block.end_a - block.start_a + 1);
+  const lenB = block.block_length_b ?? block.block_length ?? (block.end_b - block.start_b + 1);
+  const left = Math.min(x + 14, window.innerWidth - 230);
+  const top  = y - 8;
+
+  return (
+    <div
+      style={{
+        position: "fixed", left, top, zIndex: 9999, pointerEvents: "none",
+        background: "#13161e", border: `1px solid ${color}40`, borderRadius: 8,
+        padding: "8px 12px", minWidth: 190,
+        boxShadow: `0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px ${color}20`,
+        fontFamily: "var(--font-geist-sans, sans-serif)", fontSize: 11,
+        color: "#e8eaf0", lineHeight: 1.7,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+        <span style={{ background: color, borderRadius: 3, padding: "1px 7px", fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", color: block.confidence === "MEDIUM" ? "#000" : "#fff" }}>
+          {block.confidence}
+        </span>
+        <span style={{ color: "#6b7280", fontSize: 10 }}>Block #{block.block_id}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "1px 10px" }}>
+        <span style={{ color: "#6b7280" }}>Density</span>
+        <span style={{ fontWeight: 600, color }}>{densityPct}%</span>
+        <span style={{ color: "#6b7280" }}>Lines A</span>
+        <span style={{ fontWeight: 600 }}>{lenA} <span style={{ color: "#6b7280", fontWeight: 400 }}>(L{block.start_a}–{block.end_a})</span></span>
+        <span style={{ color: "#6b7280" }}>Lines B</span>
+        <span style={{ fontWeight: 600 }}>{lenB} <span style={{ color: "#6b7280", fontWeight: 400 }}>(L{block.start_b}–{block.end_b})</span></span>
+        <span style={{ color: "#6b7280" }}>In class</span>
+        <span style={{ fontWeight: 600, color: pairCount > 1 ? "#f5c542" : "#e8eaf0" }}>
+          {pairCount === 0 ? "unique to this pair" : `${pairCount} other pair${pairCount > 1 ? "s" : ""}`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Panel({
   studentName,
   fileName,
@@ -157,6 +206,8 @@ function Panel({
   focusedLines,
   onLineClick,
   bodyRef,
+  blockMap,
+  blockFrequency,
 }: {
   studentName: string;
   fileName: string;
@@ -165,15 +216,19 @@ function Panel({
   focusedLines: Set<number>;
   onLineClick: (blockId: number) => void;
   bodyRef: React.RefObject<HTMLDivElement | null>;
+  blockMap: Map<number, MatchBlock>;
+  blockFrequency: Map<number, number>;
 }) {
   const codeLines = React.useMemo(() => stripComments(source, fileName), [source, fileName]);
+  const [tooltip, setTooltip] = React.useState<{ blockId: number; x: number; y: number } | null>(null);
+
+  const tooltipBlock = tooltip ? blockMap.get(tooltip.blockId) : null;
+  const tooltipPairCount = tooltip ? (blockFrequency.get(tooltip.blockId) ?? 0) : 0;
 
   return (
     <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
       <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2 font-jb">
         <span className={`font-semibold uppercase tracking-wider ${studentName.startsWith("Ref ") ? "text-emerald-500" : "text-red-400"}`}>{studentName}</span>
-        <span className="text-muted-foreground/50">·</span>
-        <span className="text-muted-foreground truncate">{fileName.split(/[\\/]/).pop()}</span>
       </div>
       <div ref={bodyRef} className="overflow-auto flex-1">
         <table className="font-jb text-[12px] leading-[18px] w-full border-collapse">
@@ -198,6 +253,9 @@ function Panel({
                   data-focused={focused ? "true" : undefined}
                   style={getLineStyle(info.confidence, focused)}
                   onClick={() => onLineClick(info.blockId)}
+                  onMouseEnter={(e) => { if (focused) setTooltip({ blockId: info.blockId, x: e.clientX, y: e.clientY }); }}
+                  onMouseMove={(e) => { if (focused) setTooltip((t) => t ? { ...t, x: e.clientX, y: e.clientY } : null); }}
+                  onMouseLeave={() => setTooltip(null)}
                 >
                   <td className="text-right pr-2 text-primary/30 select-none text-[11px] w-10">{ln}</td>
                   <td className="px-2 whitespace-pre">{text || " "}</td>
@@ -207,6 +265,7 @@ function Panel({
           </tbody>
         </table>
       </div>
+      {tooltipBlock && tooltip && <BlockTooltip block={tooltipBlock} x={tooltip.x} y={tooltip.y} pairCount={tooltipPairCount} />}
     </div>
   );
 }
@@ -216,6 +275,7 @@ export function CodeDiffViewer({
   activeFile,
   activeFileB,
   activeBlockIds,
+  blockFrequency,
   focusedBlockId,
   onBlockClick,
 }: CodeDiffViewerProps) {
@@ -224,6 +284,8 @@ export function CodeDiffViewer({
 
   const lm1 = React.useMemo(() => buildLineMap(pair, pair.student_1, activeFile, activeBlockIds), [pair, activeFile, activeBlockIds]);
   const lm2 = React.useMemo(() => buildLineMap(pair, pair.student_2, activeFileB, activeBlockIds), [pair, activeFileB, activeBlockIds]);
+
+  const blockMap = React.useMemo(() => new Map(pair.blocks.map((b) => [b.block_id, b])), [pair.blocks]);
 
   const srcA = pair.sources?.[pair.student_1]?.[activeFile] ?? "";
   const srcB = pair.sources?.[pair.student_2]?.[activeFileB] ?? "";
@@ -281,8 +343,8 @@ export function CodeDiffViewer({
 
   return (
     <div className="flex flex-col md:flex-row gap-1 w-full h-full">
-      <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedLines={focusedLinesA} onLineClick={handleClick} bodyRef={leftRef} />
-      <Panel studentName={pair.student_2} fileName={activeFileB} source={srcB} lineMap={lm2} focusedLines={focusedLinesB} onLineClick={handleClick} bodyRef={rightRef} />
+      <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedLines={focusedLinesA} onLineClick={handleClick} bodyRef={leftRef} blockMap={blockMap} blockFrequency={blockFrequency} />
+      <Panel studentName={pair.student_2} fileName={activeFileB} source={srcB} lineMap={lm2} focusedLines={focusedLinesB} onLineClick={handleClick} bodyRef={rightRef} blockMap={blockMap} blockFrequency={blockFrequency} />
     </div>
   );
 }

@@ -129,6 +129,28 @@ export default function PairDetailPage() {
     load();
   }, [courseId, assignmentId, pairId]);
 
+  // Must be before any early returns to satisfy Rules of Hooks.
+  const blockFrequency = React.useMemo(() => {
+    const freq = new Map<number, number>();
+    if (!pair) return freq;
+    for (const block of pair.blocks) {
+      const baseA = block.file_a.split("/").pop()?.toLowerCase() ?? "";
+      let count = 0;
+      for (const other of allPairs) {
+        if (other.pair_id === pair.pair_id) continue;
+        for (const ob of other.blocks) {
+          const obBase = ob.file_a.split("/").pop()?.toLowerCase() ?? "";
+          if (obBase === baseA && ob.start_a <= block.end_a && block.start_a <= ob.end_a) {
+            count++;
+            break;
+          }
+        }
+      }
+      freq.set(block.block_id, count);
+    }
+    return freq;
+  }, [pair, allPairs]);
+
   if (loading) {
     return (
       <div className="flex justify-center py-24">
@@ -383,7 +405,6 @@ export default function PairDetailPage() {
               return (
                 <button
                   key={`${fp.fileA}::${fp.fileB}`}
-                  title={isCross ? `${fp.fileA} vs ${fp.fileB}` : fp.fileB}
                   className={`rounded px-2 py-1 whitespace-nowrap transition-colors ${
                     isActive
                       ? "bg-primary text-primary-foreground font-medium"
@@ -415,6 +436,7 @@ export default function PairDetailPage() {
               activeFile={afp.fileA}
               activeFileB={afp.fileB}
               activeBlockIds={activeBlockIds}
+              blockFrequency={blockFrequency}
               focusedBlockId={focusedBlockId}
               onBlockClick={handleBlockClick}
             />
