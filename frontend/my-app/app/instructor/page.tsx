@@ -208,7 +208,7 @@ export default function InstructorDashboard() {
               {greeting}{name ? `, ${name}` : ""}
             </h1>
           </div>
-          <div className="hidden sm:flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <div className="relative">
               <button
                 onClick={() => { setQlOpen(!qlOpen); loadAssignments(); }}
@@ -396,8 +396,8 @@ export default function InstructorDashboard() {
             </p>
           ) : (
             <div className="space-y-0">
-              {/* Table header */}
-              <div className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
+              {/* Table header — hidden on mobile */}
+              <div className="hidden sm:grid sm:grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground font-jb">
                 <span>Students</span>
                 <span>Course &amp; Assignment</span>
                 <span>Similarity</span>
@@ -409,14 +409,35 @@ export default function InstructorDashboard() {
                   <Link
                     key={`${pair.assignment_id}_${pair.pair_id}_${idx}`}
                     href={`/instructor/courses/${pair.course_id}/assignments/${pair.assignment_id}/analysis/${pair.pair_id}`}
-                    className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 items-center rounded-lg border border-border/50 p-3 transition-all hover:border-primary/25 hover:bg-primary/[0.03]"
+                    className="flex flex-col gap-2 sm:grid sm:grid-cols-[2fr_2fr_1.5fr_1fr_1fr] sm:gap-4 sm:items-center rounded-lg border border-border/50 p-3 transition-all hover:border-primary/25 hover:bg-primary/[0.03] mb-1.5 sm:mb-0"
                   >
-                    {/* Students */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <SeverityDot score={pair.severity_score} />
-                      <span className="font-medium text-sm truncate">
-                        {pair.student_1} &amp; {pair.student_2}
-                      </span>
+                    {/* Mobile: top row with student names + similarity % */}
+                    <div className="flex items-center justify-between sm:contents">
+                      {/* Students */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <SeverityDot score={pair.severity_score} />
+                        <span className="font-medium text-sm truncate">
+                          {pair.student_1} &amp; {pair.student_2}
+                        </span>
+                      </div>
+
+                      {/* Mobile-only: similarity % badge */}
+                      <div className="flex items-center gap-2 sm:hidden shrink-0">
+                        <span
+                          className="text-sm font-bold tabular-nums font-jb"
+                          style={{
+                            color:
+                              pair.similarity >= 0.7
+                                ? "#ef4444"
+                                : pair.similarity >= 0.4
+                                  ? "#f97316"
+                                  : "#eab308",
+                          }}
+                        >
+                          {Math.round(pair.similarity * 100)}%
+                        </span>
+                        <SeverityBadge level={getSeverityLevel(pair.severity_score)} />
+                      </div>
                     </div>
 
                     {/* Course & Assignment */}
@@ -429,8 +450,8 @@ export default function InstructorDashboard() {
                       </p>
                     </div>
 
-                    {/* Similarity bar */}
-                    <div className="flex items-center gap-2">
+                    {/* Similarity bar — hidden on mobile (shown inline above) */}
+                    <div className="hidden sm:flex items-center gap-2">
                       <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full rounded-full"
@@ -450,11 +471,13 @@ export default function InstructorDashboard() {
                       </span>
                     </div>
 
-                    {/* Severity */}
-                    <SeverityBadge level={getSeverityLevel(pair.severity_score)} />
+                    {/* Severity — hidden on mobile (shown inline above) */}
+                    <div className="hidden sm:block">
+                      <SeverityBadge level={getSeverityLevel(pair.severity_score)} />
+                    </div>
 
-                    {/* Score */}
-                    <span className="text-sm font-medium tabular-nums">
+                    {/* Score — hidden on mobile */}
+                    <span className="hidden sm:inline text-sm font-medium tabular-nums">
                       {pair.severity_score.toFixed(2)}
                     </span>
                   </Link>

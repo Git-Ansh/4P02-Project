@@ -17,6 +17,8 @@ import type { AnalysisPair } from "@/lib/types/analysis";
 interface CodeDiffViewerProps {
   pair: AnalysisPair;
   activeFile: string;
+  activeFileB: string;
+  activeBlockIds: Set<number>;
   focusedBlockId: number | null;
   onBlockClick: (blockId: number) => void;
 }
@@ -42,12 +44,14 @@ function buildLineMap(
   pair: AnalysisPair,
   studentName: string,
   fileName: string,
+  allowedBlockIds: Set<number>,
 ): Map<number, { blockId: number; confidence: string }> {
   const map = new Map<number, { blockId: number; confidence: string }>();
   const fileBlocks = pair.files?.[studentName]?.[fileName];
   if (!fileBlocks) return map;
 
   for (const fb of fileBlocks) {
+    if (!allowedBlockIds.has(fb.block_id)) continue;
     const block = pair.blocks.find((b) => b.block_id === fb.block_id);
     if (!block) continue;
     const newRank = CONFIDENCE_RANK[block.confidence] ?? 1;
@@ -165,9 +169,11 @@ function Panel({
   const codeLines = React.useMemo(() => stripComments(source, fileName), [source, fileName]);
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden">
-      <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2 font-jb uppercase tracking-wider">
-        <span className={`font-semibold ${studentName.startsWith("Ref ") ? "text-emerald-500" : "text-red-400"}`}>{studentName}</span>
+    <div className="flex-1 min-w-0 flex flex-col border rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
+      <div className="px-3 py-1.5 bg-muted/50 border-b text-xs flex items-center gap-2 font-jb">
+        <span className={`font-semibold uppercase tracking-wider ${studentName.startsWith("Ref ") ? "text-emerald-500" : "text-red-400"}`}>{studentName}</span>
+        <span className="text-muted-foreground/50">·</span>
+        <span className="text-muted-foreground truncate">{fileName.split(/[\\/]/).pop()}</span>
       </div>
       <div ref={bodyRef} className="overflow-auto flex-1">
         <table className="font-jb text-[12px] leading-[18px] w-full border-collapse">
@@ -208,29 +214,16 @@ function Panel({
 export function CodeDiffViewer({
   pair,
   activeFile,
+  activeFileB,
+  activeBlockIds,
   focusedBlockId,
   onBlockClick,
 }: CodeDiffViewerProps) {
   const leftRef = React.useRef<HTMLDivElement>(null);
   const rightRef = React.useRef<HTMLDivElement>(null);
 
-  // activeFile is from student_1's perspective. Find student_2's corresponding
-  // file via blocks (cross-filename matching means they can differ).
-  const activeFileB = React.useMemo(() => {
-    // Try same filename first
-    if (pair.sources?.[pair.student_2]?.[activeFile]) return activeFile;
-    // Look up from blocks: find a block where file_a === activeFile
-    const block = pair.blocks.find((b) => b.file_a === activeFile);
-    if (block?.file_b) return block.file_b;
-    // Fall back: use the only file in student_2's map
-    const s2Files = pair.files?.[pair.student_2] ?? {};
-    const s2Keys = Object.keys(s2Files);
-    if (s2Keys.length === 1) return s2Keys[0];
-    return activeFile;
-  }, [pair, activeFile]);
-
-  const lm1 = React.useMemo(() => buildLineMap(pair, pair.student_1, activeFile), [pair, activeFile]);
-  const lm2 = React.useMemo(() => buildLineMap(pair, pair.student_2, activeFileB), [pair, activeFileB]);
+  const lm1 = React.useMemo(() => buildLineMap(pair, pair.student_1, activeFile, activeBlockIds), [pair, activeFile, activeBlockIds]);
+  const lm2 = React.useMemo(() => buildLineMap(pair, pair.student_2, activeFileB, activeBlockIds), [pair, activeFileB, activeBlockIds]);
 
   const srcA = pair.sources?.[pair.student_1]?.[activeFile] ?? "";
   const srcB = pair.sources?.[pair.student_2]?.[activeFileB] ?? "";
@@ -287,7 +280,7 @@ export function CodeDiffViewer({
   );
 
   return (
-    <div className="flex gap-1 w-full h-full">
+    <div className="flex flex-col md:flex-row gap-1 w-full h-full">
       <Panel studentName={pair.student_1} fileName={activeFile} source={srcA} lineMap={lm1} focusedLines={focusedLinesA} onLineClick={handleClick} bodyRef={leftRef} />
       <Panel studentName={pair.student_2} fileName={activeFileB} source={srcB} lineMap={lm2} focusedLines={focusedLinesB} onLineClick={handleClick} bodyRef={rightRef} />
     </div>

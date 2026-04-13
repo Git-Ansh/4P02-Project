@@ -348,15 +348,15 @@ export default function CourseDetailPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 sm:ml-4 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:ml-4 shrink-0">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleGenerateToken(a)}
                         title="Generate Token"
                       >
-                        <Key className="h-3.5 w-3.5 mr-1" />
-                        Token
+                        <Key className="h-3.5 w-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Token</span>
                       </Button>
                       <Button
                         variant="outline"
@@ -365,8 +365,8 @@ export default function CourseDetailPage() {
                         title="View Submissions"
                       >
                         <Link href={`/instructor/courses/${courseId}/assignments/${a.id}/submissions`}>
-                          <FileText className="h-3.5 w-3.5 mr-1" />
-                          Submissions
+                          <FileText className="h-3.5 w-3.5 sm:mr-1" />
+                          <span className="hidden sm:inline">Submissions</span>
                         </Link>
                       </Button>
                       <Button
@@ -376,14 +376,15 @@ export default function CourseDetailPage() {
                         title="Run Analysis"
                       >
                         <Link href={`/instructor/courses/${courseId}/assignments/${a.id}/analysis`}>
-                          <Shield className="h-3.5 w-3.5 mr-1" />
-                          Analysis
+                          <Shield className="h-3.5 w-3.5 sm:mr-1" />
+                          <span className="hidden sm:inline">Analysis</span>
                         </Link>
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setEditAssignment(a)}
+                        title="Edit"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>

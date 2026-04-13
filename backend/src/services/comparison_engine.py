@@ -945,30 +945,13 @@ def _names_match(a, b):
 
 
 def _method_context_compatible(block):
-    uta = block.get("unit_type_a")
-    utb = block.get("unit_type_b")
-
-    same_file = _same_logical_file(
-        block.get("file_a", ""), block.get("file_b", "")
-    )
-    if not same_file:
-        return True
-
-    if uta == "METHOD" and utb == "METHOD":
-        na = block.get("unit_name_a")
-        nb = block.get("unit_name_b")
-        if na and nb and not _names_match(na, nb):
-            density = block.get("density", 0)
-            if density < 0.35:
-                return False
-
-    pma = block.get("parent_method_name_a")
-    pmb = block.get("parent_method_name_b")
-    if pma and pmb and not _names_match(pma, pmb):
-        density = block.get("density", 0)
-        if density < 0.35:
-            return False
-
+    # This function is only ever called in cross-student comparisons.
+    # File paths are stored relative to each student's submission directory,
+    # so same-named files (e.g. utils.cpp from Ref E and utils.cpp from Ref F)
+    # both appear as "utils.cpp" — but they are NOT the same file.
+    # Filtering based on method-name mismatches in "same-named" files incorrectly
+    # suppresses legitimate plagiarism signals (students often rename functions
+    # to obscure copying). The density threshold in _strong_blocks is sufficient.
     return True
 
 
