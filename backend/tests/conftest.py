@@ -181,6 +181,7 @@ async def sample_course(mongo_client, seed_instructor):
         "instructor_email": "instructor@test.com",
         "instructor_name": "Test Instructor",
         "created_at": datetime.now(timezone.utc),
+        "end_date": datetime(2026, 4, 30, 12, 0, 0, tzinfo=timezone.utc),
     }
     result = await db.courses.insert_one(doc)
     doc["_id"] = result.inserted_id
