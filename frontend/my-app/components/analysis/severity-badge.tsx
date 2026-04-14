@@ -1,5 +1,21 @@
 "use client";
 
+/**
+ * @file severity-badge.tsx
+ * Shared severity/confidence UI primitives used across the analysis views.
+ *
+ * Exports:
+ *   - `SeverityBadge`     — coloured pill label for HIGH / MEDIUM / LOW.
+ *   - `SeverityDot`       — small coloured dot indicator keyed on a numeric score.
+ *   - `getSeverityLevel`  — map a numeric severity score to a label string.
+ *   - `getSeverityColor`  — map a numeric severity score to a Tailwind text-colour class.
+ *
+ * Severity thresholds (score in [0, 1]):
+ *   >= 0.7 → HIGH   (red)
+ *   >= 0.4 → MEDIUM (orange)
+ *   <  0.4 → LOW    (yellow)
+ */
+
 import { cn } from "@/lib/utils";
 
 interface SeverityBadgeProps {

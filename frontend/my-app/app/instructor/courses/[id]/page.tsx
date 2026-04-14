@@ -18,6 +18,9 @@ import {
   Check,
   FileText,
   Shield,
+  Clock,
+  AlertTriangle,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +67,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch, ApiError } from "@/lib/api";
 
+/** Format a date string in Toronto timezone so it always shows the correct local date. */
+function fmtToronto(dateStr: string, opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric" }) {
+  return new Date(dateStr).toLocaleDateString("en-CA", { timeZone: "America/Toronto", ...opts });
+}
+
 interface Course {
   id: string;
   code: string;
@@ -71,6 +79,8 @@ interface Course {
   term: string;
   description: string | null;
   instructor_name: string;
+  end_date: string | null;
+  expiry_status: "expiring_soon" | "grace_period" | "data_deleted" | null;
 }
 
 interface Assignment {
@@ -232,6 +242,64 @@ export default function CourseDetailPage() {
         Back to Courses
       </Link>
 
+      {/* Expiry banners */}
+      {course.expiry_status === "expiring_soon" && (() => {
+        const deleteDate = new Date(course.end_date!);
+        deleteDate.setDate(deleteDate.getDate() + 30);
+        return (
+          <div className="mb-5 flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300">
+            <Clock className="h-5 w-5 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">This course is expiring soon</p>
+              <p className="text-sm mt-0.5">
+                The course ends on{" "}
+                <strong>{fmtToronto(course.end_date!, { year: "numeric", month: "long", day: "numeric" })}</strong>
+                . After that you have a 30-day grace period to download
+                submissions as a repository. All student data will be
+                permanently deleted on{" "}
+                <strong>{fmtToronto(deleteDate.toISOString(), { year: "numeric", month: "long", day: "numeric" })}</strong>
+                .
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {course.expiry_status === "grace_period" && (() => {
+        const deleteDate = new Date(course.end_date!);
+        deleteDate.setDate(deleteDate.getDate() + 30);
+        return (
+          <div className="mb-5 flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-orange-800 dark:border-orange-700 dark:bg-orange-900/20 dark:text-orange-300">
+            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Grace period — download submissions now</p>
+              <p className="text-sm mt-0.5">
+                This course ended on{" "}
+                <strong>{fmtToronto(course.end_date!, { year: "numeric", month: "long", day: "numeric" })}</strong>
+                . Download your submissions as a repository before{" "}
+                <strong>{fmtToronto(deleteDate.toISOString(), { year: "numeric", month: "long", day: "numeric" })}</strong>{" "}
+                — all student data will be permanently deleted on that date.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {course.expiry_status === "data_deleted" && (
+        <div className="mb-5 flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-800 dark:border-red-700 dark:bg-red-900/20 dark:text-red-300">
+          <Archive className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Student data has been deleted</p>
+            <p className="text-sm mt-0.5">
+              The 30-day grace period for this course has expired. All student
+              submissions and associated files have been permanently deleted in
+              accordance with the data retention policy. Course and assignment
+              records are still available for reference.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Course header */}
       <div className="mb-6 sm:mb-8">
         <div>
@@ -348,15 +416,15 @@ export default function CourseDetailPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 sm:ml-4 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:ml-4 shrink-0">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleGenerateToken(a)}
                         title="Generate Token"
                       >
-                        <Key className="h-3.5 w-3.5 mr-1" />
-                        Token
+                        <Key className="h-3.5 w-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Token</span>
                       </Button>
                       <Button
                         variant="outline"
@@ -365,8 +433,8 @@ export default function CourseDetailPage() {
                         title="View Submissions"
                       >
                         <Link href={`/instructor/courses/${courseId}/assignments/${a.id}/submissions`}>
-                          <FileText className="h-3.5 w-3.5 mr-1" />
-                          Submissions
+                          <FileText className="h-3.5 w-3.5 sm:mr-1" />
+                          <span className="hidden sm:inline">Submissions</span>
                         </Link>
                       </Button>
                       <Button
@@ -376,14 +444,15 @@ export default function CourseDetailPage() {
                         title="Run Analysis"
                       >
                         <Link href={`/instructor/courses/${courseId}/assignments/${a.id}/analysis`}>
-                          <Shield className="h-3.5 w-3.5 mr-1" />
-                          Analysis
+                          <Shield className="h-3.5 w-3.5 sm:mr-1" />
+                          <span className="hidden sm:inline">Analysis</span>
                         </Link>
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setEditAssignment(a)}
+                        title="Edit"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>

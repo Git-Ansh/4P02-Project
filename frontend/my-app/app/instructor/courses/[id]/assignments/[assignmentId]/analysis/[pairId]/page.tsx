@@ -23,6 +23,32 @@ import type { AnalysisPair, AnalysisReport } from "@/lib/types/analysis";
 
 interface CourseInfo { id: string; code: string }
 
+function getFilePairsFromBlocks(pair: AnalysisPair): Array<{ fileA: string; fileB: string }> {
+  const fileBtoA = new Map<string, string>();
+  for (const b of pair.blocks) {
+    const fa = b.file_a || "";
+    const fb = b.file_b || "";
+    if (fb && !fileBtoA.has(fb)) fileBtoA.set(fb, fa);
+  }
+  const s2Files = Object.keys(pair.sources?.[pair.student_2] ?? {});
+  const s1Files = Object.keys(pair.sources?.[pair.student_1] ?? {});
+  for (const fb of s2Files) {
+    if (!fileBtoA.has(fb)) {
+      const fa = s1Files.includes(fb) ? fb : (s1Files[0] ?? "");
+      fileBtoA.set(fb, fa);
+    }
+  }
+  const result: Array<{ fileA: string; fileB: string }> = [];
+  fileBtoA.forEach((fa, fb) => result.push({ fileA: fa, fileB: fb }));
+  result.sort((a, b) => {
+    const aSame = a.fileA === a.fileB ? 0 : 1;
+    const bSame = b.fileA === b.fileB ? 0 : 1;
+    if (aSame !== bSame) return aSame - bSame;
+    return a.fileB.localeCompare(b.fileB);
+  });
+  return result;
+}
+
 export default function PairDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -36,7 +62,7 @@ export default function PairDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
-  const [activeFile, setActiveFile] = React.useState("");
+  const [activeFilePair, setActiveFilePair] = React.useState<{ fileA: string; fileB: string } | null>(null);
   const [focusedBlockId, setFocusedBlockId] = React.useState<number | null>(null);
 
   // Reveal
@@ -64,8 +90,8 @@ export default function PairDetailPage() {
         setPair(pairData);
         setAllPairs(reportData.pairs ?? []);
 
-        const files = Object.keys(pairData.sources?.[pairData.student_1] ?? {});
-        if (files.length > 0) setActiveFile(files[0]);
+        const fps = getFilePairsFromBlocks(pairData);
+        if (fps.length > 0) setActiveFilePair(fps[0]);
 
       } catch (err) {
         setError("Failed to load pair data");
@@ -103,6 +129,28 @@ export default function PairDetailPage() {
     load();
   }, [courseId, assignmentId, pairId]);
 
+  // Must be before any early returns to satisfy Rules of Hooks.
+  const blockFrequency = React.useMemo(() => {
+    const freq = new Map<number, number>();
+    if (!pair) return freq;
+    for (const block of pair.blocks) {
+      const baseA = block.file_a.split("/").pop()?.toLowerCase() ?? "";
+      let count = 0;
+      for (const other of allPairs) {
+        if (other.pair_id === pair.pair_id) continue;
+        for (const ob of other.blocks) {
+          const obBase = ob.file_a.split("/").pop()?.toLowerCase() ?? "";
+          if (obBase === baseA && ob.start_a <= block.end_a && block.start_a <= ob.end_a) {
+            count++;
+            break;
+          }
+        }
+      }
+      freq.set(block.block_id, count);
+    }
+    return freq;
+  }, [pair, allPairs]);
+
   if (loading) {
     return (
       <div className="flex justify-center py-24">
@@ -123,16 +171,19 @@ export default function PairDetailPage() {
     );
   }
 
-  const s1Src = pair.sources?.[pair.student_1] ?? {};
-  // Only show files from student_1 (left side drives tabs).
-  // Cross-filename matches are resolved by code-diff-viewer via block data.
-  const fileList = Object.keys(s1Src);
-  const s1Files = pair.files?.[pair.student_1] ?? {};
+  // Build file-pair tabs from blocks so cross-filename pairs get their own tab.
+  const filePairs = getFilePairsFromBlocks(pair);
+  const afp = activeFilePair ?? filePairs[0] ?? { fileA: "", fileB: "" };
 
-  const fileBlocks = (s1Files[activeFile] ?? []) as Array<{ block_id: number; start: number; end: number }>;
-  const currentBlocks = fileBlocks
-    .map((fb) => pair.blocks.find((b) => b.block_id === fb.block_id))
-    .filter((b): b is NonNullable<typeof b> => b != null);
+  // Blocks for the active tab = intersection of blocks in fileA (student_1) and fileB (student_2).
+  const s1FileBlocks = (pair.files?.[pair.student_1]?.[afp.fileA] ?? []) as Array<{ block_id: number; start: number; end: number }>;
+  const s2FileBlocks = (pair.files?.[pair.student_2]?.[afp.fileB] ?? []) as Array<{ block_id: number; start: number; end: number }>;
+  const s1BlockIds = new Set(s1FileBlocks.map((fb) => fb.block_id));
+  const s2BlockIds = new Set(s2FileBlocks.map((fb) => fb.block_id));
+  const tabBlockIds = new Set([...s1BlockIds].filter((id) => s2BlockIds.has(id)));
+  // Fall back to union when intersection is empty (pure cross-file tab)
+  const activeBlockIds = tabBlockIds.size > 0 ? tabBlockIds : new Set([...s1BlockIds, ...s2BlockIds]);
+  const currentBlocks = pair.blocks.filter((b) => activeBlockIds.has(b.block_id));
 
   const focusedIdx = focusedBlockId != null
     ? currentBlocks.findIndex((b) => b.block_id === focusedBlockId) + 1
@@ -173,7 +224,7 @@ export default function PairDetailPage() {
   };
 
   return (
-    <div className="flex h-[100vh] overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden">
       {/* ── Pairs sidebar ── */}
       <div className="hidden lg:flex flex-col w-56 shrink-0 border-r bg-muted/20">
         <div className="px-3 py-2 border-b">
@@ -223,9 +274,18 @@ export default function PairDetailPage() {
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar: summary + controls */}
-        <div className="shrink-0 border-b px-4 py-2 space-y-1.5">
+        <div className="shrink-0 border-b px-3 sm:px-4 py-2 space-y-1.5">
+          {/* Mobile: back link (pairs sidebar is hidden on mobile) */}
+          <div className="flex items-center gap-2 lg:hidden text-xs mb-1">
+            <Link
+              href={`/instructor/courses/${courseId}/assignments/${assignmentId}/analysis`}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              ← Back to Analysis
+            </Link>
+          </div>
           {/* Summary */}
-          <div className="flex items-center gap-3 flex-wrap text-sm">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-sm">
             {realNames ? (
               <div className="flex flex-col leading-tight">
                 <span className="font-semibold">{realNames.s1}</span>
@@ -333,21 +393,30 @@ export default function PairDetailPage() {
           </div>
 
           {/* File tabs + block nav */}
-          <div className="flex items-center gap-2 flex-wrap text-xs">
-            {fileList.length > 1 && fileList.map((fname) => (
-              <button
-                key={fname}
-                className={`rounded px-2 py-1 whitespace-nowrap transition-colors ${
-                  activeFile === fname
-                    ? "bg-primary text-primary-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-                onClick={() => { setActiveFile(fname); setFocusedBlockId(null); }}
-              >
-                File {fileList.indexOf(fname) + 1} ({((s1Files[fname] ?? []) as unknown[]).length})
-              </button>
-            ))}
-            {fileList.length > 1 && <span className="w-px h-4 bg-border" />}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs">
+            {filePairs.length > 1 && filePairs.map((fp, idx) => {
+              const isCross = fp.fileA !== fp.fileB;
+              const isActive = afp.fileA === fp.fileA && afp.fileB === fp.fileB;
+              // Count blocks for this tab
+              const fpS1Ids = new Set(((pair.files?.[pair.student_1]?.[fp.fileA] ?? []) as Array<{block_id: number}>).map(b => b.block_id));
+              const fpS2Ids = new Set(((pair.files?.[pair.student_2]?.[fp.fileB] ?? []) as Array<{block_id: number}>).map(b => b.block_id));
+              const fpInter = new Set([...fpS1Ids].filter(id => fpS2Ids.has(id)));
+              const fpCount = (fpInter.size > 0 ? fpInter : new Set([...fpS1Ids, ...fpS2Ids])).size;
+              return (
+                <button
+                  key={`${fp.fileA}::${fp.fileB}`}
+                  className={`rounded px-2 py-1 whitespace-nowrap transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  onClick={() => { setActiveFilePair(fp); setFocusedBlockId(null); }}
+                >
+                  File {idx + 1} ({fpCount}){isCross ? " *" : ""}
+                </button>
+              );
+            })}
+            {filePairs.length > 1 && <span className="w-px h-4 bg-border" />}
             <div className="ml-auto flex items-center gap-2">
               {focusedBlock && <SeverityBadge level={focusedBlock.confidence} />}
               <span className="text-muted-foreground">
@@ -360,11 +429,14 @@ export default function PairDetailPage() {
         </div>
 
         {/* Code diff viewer — takes all remaining space */}
-        {activeFile && (
+        {afp.fileA && (
           <div className="flex-1 overflow-hidden">
             <CodeDiffViewer
               pair={pair}
-              activeFile={activeFile}
+              activeFile={afp.fileA}
+              activeFileB={afp.fileB}
+              activeBlockIds={activeBlockIds}
+              blockFrequency={blockFrequency}
               focusedBlockId={focusedBlockId}
               onBlockClick={handleBlockClick}
             />

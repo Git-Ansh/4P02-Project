@@ -1,3 +1,14 @@
+"""
+Authentication API router — /api/auth/*
+
+Public endpoints (no token required):
+    POST /api/auth/login        — email + password → JWT access token
+    GET  /api/auth/university   — resolve a university slug to theme / metadata
+
+These are the only routes that do not go through the ``get_current_user``
+dependency, since they are responsible for issuing tokens in the first place.
+"""
+
 from fastapi import APIRouter, HTTPException, status
 
 from src.config.database import get_main_db, get_university_db

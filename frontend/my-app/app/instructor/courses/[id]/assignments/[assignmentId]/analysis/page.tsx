@@ -306,7 +306,7 @@ export default function AssignmentAnalysisPage() {
               ` — Last run ${new Date(report.completed_at).toLocaleString()}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button onClick={handleRunAnalysis} disabled={running}>
             {running ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

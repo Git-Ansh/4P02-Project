@@ -25,6 +25,14 @@ export const metadata: Metadata = {
   description: "Advanced plagiarism detection and academic integrity enforcement system. Trusted by universities worldwide.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  minimumScale: 0.5,
+  maximumScale: 5,
+  userScalable: true,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

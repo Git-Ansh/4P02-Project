@@ -1,3 +1,24 @@
+"""
+University admin API router — /api/admin/*
+
+Restricted to users with role == "university_admin".  University admins
+manage a single institution and cannot access data from other universities.
+
+Responsibilities
+----------------
+- Create and deactivate instructor accounts within their university.
+- Manage university profile (name, logo, primary colour, domain).
+- Approve or deny identity-reveal requests submitted by instructors.
+- View university-wide activity (courses, assignments, analysis jobs).
+
+Identity reveal workflow
+------------------------
+When an instructor requests to reveal a student's real identity (to pursue
+an academic integrity case), the request is queued and only fulfilled after
+a university admin explicitly approves it here.  This two-step process
+ensures that anonymized data is never exposed without institutional oversight.
+"""
+
 from datetime import datetime, timezone
 
 from bson import ObjectId

@@ -1,3 +1,26 @@
+"""
+Student submission API router — /api/submit/*
+
+These are the only routes accessible to students (no account required).
+A student authenticates by providing a valid assignment token (a URL-safe
+JWT issued by an instructor for a specific assignment).
+
+Key endpoints:
+    POST /api/submit/verify-token       — validate an assignment token and
+                                          return course / assignment metadata
+    POST /api/submit/upload             — upload source files or a ZIP archive;
+                                          encrypts and stores files on disk and
+                                          records the submission in MongoDB
+    GET  /api/submit/status/{token}     — check whether a submission already
+                                          exists for this student + assignment
+
+File storage
+------------
+Uploaded files are AES-128 encrypted at rest using Fernet (see
+``src/utils/encryption.py``) and stored under:
+    UPLOAD_DIR/{university_slug}/{course_id}/{assignment_id}/{submission_id}/
+"""
+
 import os
 import shutil
 import threading

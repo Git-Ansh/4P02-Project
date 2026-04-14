@@ -1,3 +1,76 @@
+"""
+Source-code similarity comparison engine.
+
+Pipeline overview
+-----------------
+Given a set of student ZIP archives for a single assignment, the engine
+produces a list of flagged submission pairs ordered by similarity score.
+
+Step 1 — Tokenisation (per file)
+    Each source file is parsed by Tree-sitter into an AST.  The AST is walked
+    to emit a stream of structural tokens (FUNC_DEF, LOOP_START, IF, RETURN,
+    …) rather than raw source text.  Identifiers, literals, and type names are
+    normalised via LEXICAL_MAP so that trivially renamed variables do not evade
+    detection.
+
+Step 2 — Semantic enrichment
+    After structural tokenisation a second pass adds semantic tokens for
+    patterns that carry high plagiarism signal: method calls, accumulator
+    patterns (e.g. ``sum += x``), and common API usage.  These tokens are
+    injected inline so they participate in fingerprinting.
+
+Step 3 — Adaptive k-gram hashing
+    The token stream is split into overlapping k-grams.  The value of k is
+    chosen adaptively based on the file's token count (ADAPTIVE_K_THRESHOLDS):
+    smaller files use k=3 so short snippets are still detectable; large files
+    use up to k=9 to reduce false positives from common boilerplate.
+    Each k-gram is hashed with MurmurHash3-128 (Blake2b fallback if mmh3 is
+    unavailable).
+
+Step 4 — Winnowing (fingerprint selection)
+    The Moss-style winnowing algorithm slides a window of size w over the
+    hash sequence and selects the minimum hash in each window.  This reduces
+    the fingerprint set while preserving coverage.  Tie-breaking prefers the
+    rightmost occurrence, matching the original Moss specification.
+
+Step 5 — IDF-weighted Jaccard similarity
+    For each candidate pair (pairs sharing at least one hash) the engine
+    computes a weighted Jaccard score.  Hashes that appear in many submissions
+    contribute less to the score (IDF weighting) so common boilerplate patterns
+    are down-weighted relative to rare, distinctive code.
+
+Step 6 — Unit-aware block merging
+    Matching fingerprints are mapped back to source line ranges.  Contiguous
+    or overlapping line ranges within the same structural unit (method, loop,
+    conditional block) are merged into a single MatchBlock.  Each block is
+    assigned a confidence level:
+        FILE   — entire file is near-identical (similarity ≥ FILE_SIMILARITY_THRESHOLD)
+        HIGH   — dense match within a named function or class
+        MEDIUM — moderate match
+        LOW    — sparse or short match
+
+Step 7 — Boilerplate exclusion
+    If boilerplate fingerprints are provided (from instructor-uploaded template
+    code) they are subtracted from all student fingerprint sets before scoring,
+    preventing instructor-provided code from inflating similarity scores.
+
+Parallelism
+-----------
+Pair comparisons are distributed across a ``ProcessPoolExecutor`` with one
+worker per CPU core.  Tokenisation is single-threaded (Tree-sitter is not
+thread-safe) but is fast relative to the pairwise comparison phase.
+
+Constants (tunable)
+-------------------
+    SIMILARITY_THRESHOLD        — Minimum score for a pair to be reported (0 = all pairs).
+    UNIT_MATCH_THRESHOLD        — Minimum density for a block to be included.
+    FILE_SIMILARITY_THRESHOLD   — Score above which the entire file is flagged as FILE confidence.
+    ADAPTIVE_K_THRESHOLDS       — (token_count_ceiling, k) breakpoints.
+    ADAPTIVE_K_MAX              — Maximum k value for very large files.
+    MIN_TOKEN_DIVERSITY         — Minimum number of distinct token types required
+                                  to fingerprint a file (prevents trivially short files).
+"""
+
 import os
 import re
 import zipfile
@@ -30,7 +103,7 @@ FILE_SIMILARITY_THRESHOLD = 0.90
 
 ADAPTIVE_K_THRESHOLDS = [
     (30, 3),
-    (80, 4),
+    (60, 4),
     (200, 5),
     (500, 7),
 ]
@@ -39,38 +112,54 @@ ADAPTIVE_K_MAX = 9
 MIN_TOKEN_DIVERSITY = 3
 
 LEXICAL_MAP = {
+    # --- Java ---
     "identifier": "ID",
     "field_identifier": "ID",
     "type_identifier": "TYPE",
     "decimal_integer_literal": "NUM",
     "hex_integer_literal": "NUM",
-    "number_literal": "NUM",
+    "number_literal": "NUM",          # C/C++
     "floating_point_literal": "NUM",
     "string_literal": "STR",
-    "character_literal": "STR",
+    "character_literal": "STR",       # Java char literal
+    "char_literal": "STR",            # C/C++ char literal
     "true": "BOOL",
     "false": "BOOL",
-    "null_literal": "NULL",
+    "null_literal": "NULL",           # Java null
+    "null": "NULL",                   # C++ nullptr
+    "primitive_type": "TYPE",         # C++ int, float, char, void, etc.
+    "auto": "TYPE",                   # C++ auto
 }
 
 STRUCTURAL_MAP = {
     "return_statement": "RETURN",
-    "method_declaration": "FUNC_DEF",
-    "function_definition": "FUNC_DEF",
-    "constructor_declaration": "FUNC_DEF",
+    "method_declaration": "FUNC_DEF",       # Java
+    "function_definition": "FUNC_DEF",      # C/C++
+    "constructor_declaration": "FUNC_DEF",  # Java
     "assignment_expression": "ASSIGN",
     "binary_expression": "BIN_OP",
     "update_expression": "UPDATE",
-    "variable_declarator": "VAR_DECL",
-    "local_variable_declaration": "VAR_DECL",
-    "declaration": "VAR_DECL",
-    "array_access": "INDEX",
-    "method_invocation": "CALL",
-    "call_expression": "CALL",
-    "object_creation_expression": "NEW",
+    "variable_declarator": "VAR_DECL",      # Java
+    "local_variable_declaration": "VAR_DECL",# Java
+    "declaration": "VAR_DECL",              # C/C++
+    "init_declarator": "VAR_DECL",          # C/C++ (int x = 0)
+    "array_access": "INDEX",                # Java
+    "subscript_expression": "INDEX",        # C/C++
+    "method_invocation": "CALL",            # Java
+    "call_expression": "CALL",              # C/C++
+    "object_creation_expression": "NEW",    # Java (new Foo())
+    "new_expression": "NEW",                # C++ (new int(42))
+    "delete_expression": "DELETE",          # C++
+    "conditional_expression": "TERNARY",    # C/C++ (a ? b : c)
+    "unary_expression": "UNARY",            # C/C++ (-x, !x, *p, &x)
+    "field_expression": "FIELD_ACCESS",     # C/C++ (obj.member, ptr->member)
+    "throw_statement": "THROW",             # C/C++
+    "break_statement": "BREAK",             # C/C++
+    "lambda_expression": "LAMBDA",          # C++
 }
 
 IGNORE_NODE_TYPES = {
+    # --- Shared / Java ---
     "comment",
     "line_comment",
     "block_comment",
@@ -81,19 +170,56 @@ IGNORE_NODE_TYPES = {
     "formal_parameters",
     "argument_list",
     "translation_unit",
+    # --- C/C++ ---
+    "condition_clause",
+    "else_clause",
+    "field_declaration_list",
+    "field_declaration",
+    "template_declaration",
+    "preproc_include",
+    "using_declaration",
+    "parameter_list",
+    "parameter_declaration",
+    "placeholder_type_specifier",
+    "subscript_argument_list",
+    "access_specifier",
+    "type_qualifier",
+    "storage_class_specifier",
+    "template_parameter_list",
+    "template_argument_list",
+    "type_descriptor",
+    "type_parameter_declaration",
+    "field_initializer_list",
+    "field_initializer",
+    "catch_clause",
+    "try_statement",
+    "reference_declarator",
+    "pointer_declarator",
+    "function_declarator",
+    "abstract_function_declarator",
+    "lambda_capture_specifier",
+    "initializer_list",
+    "system_lib_string",
+    "string_content",
+    "destructor_name",
+    "operator_name",
+    "template_type",
 }
 
 STRUCTURE_TYPES = {
-    "method_declaration": "METHOD",
-    "constructor_declaration": "METHOD",
-    "function_definition": "METHOD",
+    "method_declaration": "METHOD",         # Java
+    "constructor_declaration": "METHOD",    # Java
+    "function_definition": "METHOD",        # C/C++
     "for_statement": "LOOP",
-    "enhanced_for_statement": "LOOP",
+    "enhanced_for_statement": "LOOP",       # Java
+    "for_range_loop": "LOOP",              # C++ (for auto& x : v)
     "while_statement": "LOOP",
     "do_statement": "LOOP",
     "if_statement": "IF",
-    "switch_expression": "SWITCH",
-    "switch_statement": "SWITCH",
+    "switch_expression": "SWITCH",          # Java
+    "switch_statement": "SWITCH",           # C/C++
+    "class_specifier": "CLASS",             # C++
+    "struct_specifier": "CLASS",            # C++
 }
 
 UNIT_PRIORITY = {
@@ -108,21 +234,36 @@ JAVA_LANG = Language(tree_sitter_java.language())
 CPP_LANG = Language(tree_sitter_cpp.language())
 
 
-LOOP_TYPES = {"for_statement", "enhanced_for_statement", "while_statement", "do_statement"}
+LOOP_TYPES = {
+    "for_statement", "enhanced_for_statement", "while_statement", "do_statement",
+    "for_range_loop",
+}
 METHOD_TYPES = {"method_declaration", "constructor_declaration", "function_definition"}
-CLASS_TYPES = set()
+CLASS_TYPES = {"class_specifier", "struct_specifier"}
 IF_TYPES = {"if_statement"}
 SWITCH_TYPES = {"switch_expression", "switch_statement"}
 BODY_FIELD_CANDIDATES = ("body", "consequence", "alternative")
 
 
-def adaptive_k(token_count):
+def adaptive_k(token_count: int) -> int:
+    """Choose k-gram size based on the number of tokens in a file.
+
+    Smaller files use a lower k so that even short code snippets produce
+    fingerprints.  Larger files use a higher k to reduce noise from common
+    short patterns (e.g. a lone ``RETURN`` token).
+    """
     for threshold, k in ADAPTIVE_K_THRESHOLDS:
         if token_count < threshold:
             return k
     return ADAPTIVE_K_MAX
 
-def adaptive_window(token_count):
+
+def adaptive_window(token_count: int) -> int:
+    """Choose the winnowing window size based on token count.
+
+    A larger window retains fewer fingerprints (more aggressive compression)
+    and is appropriate for larger files where density of unique patterns is higher.
+    """
     if token_count < 30:
         return 2
     if token_count < 80:
@@ -131,22 +272,29 @@ def adaptive_window(token_count):
         return 4
     return 5
 
-def _same_logical_file(path_a, path_b):
+
+def _same_logical_file(path_a: str, path_b: str) -> bool:
+    """Return True if both paths refer to the same filename (case-insensitive basename comparison)."""
     return os.path.basename(path_a).lower() == os.path.basename(path_b).lower()
 
 
-def _is_reportable_unit(unit_type):
+def _is_reportable_unit(unit_type: str) -> bool:
+    """Return True if the structural unit type should be included in the output report."""
     return unit_type in {"METHOD", "LOOP", "IF", "SWITCH"}
 
 
+def get_parser(extension: str):
+    """Return a Tree-sitter Parser configured for the given file extension.
 
-def get_parser(extension):
+    Supports Java (.java) and C/C++ (.c, .cpp, .cc, .h, .hpp, .cxx, .hxx, .C).
+    Returns None for unsupported extensions so callers can skip the file gracefully.
+    """
     parser = Parser()
     try:
         if extension == ".java":
             parser.language = JAVA_LANG
             return parser
-        if extension in {".cpp", ".c", ".cc", ".h", ".hpp"}:
+        if extension in {".cpp", ".c", ".cc", ".h", ".hpp", ".cxx", ".hxx", ".C"}:
             parser.language = CPP_LANG
             return parser
     except Exception:
@@ -154,15 +302,12 @@ def get_parser(extension):
     return None
 
 
-
 def _append_token(tokens, token_str, line):
     tokens.append({"t": token_str, "line": line})
 
 
-
 def _iter_named_children(node):
     return [child for child in node.children if getattr(child, "is_named", False)]
-
 
 
 def _get_body_children(node):
@@ -192,10 +337,26 @@ def _get_body_children(node):
 def _extract_unit_name(node):
     try:
         if node.type in METHOD_TYPES:
-            for field in ("name", "declarator"):
-                child = node.child_by_field_name(field)
-                if child is not None:
-                    return child.text.decode("utf-8", errors="ignore")
+            name_child = node.child_by_field_name("name")
+            if name_child is not None:
+                return name_child.text.decode("utf-8", errors="ignore")
+
+            decl = node.child_by_field_name("declarator")
+            if decl is not None:
+                if decl.type == "function_declarator":
+                    inner = decl.child_by_field_name("declarator")
+                    if inner is not None:
+                        name_text = inner.text.decode("utf-8", errors="ignore")
+                        if "::" in name_text:
+                            name_text = name_text.rsplit("::", 1)[-1]
+                        name_text = name_text.lstrip("~")
+                        return name_text
+                    for child in decl.children:
+                        if child.type in {"identifier", "field_identifier"}:
+                            return child.text.decode("utf-8", errors="ignore")
+                if decl.type in {"identifier", "field_identifier"}:
+                    return decl.text.decode("utf-8", errors="ignore")
+
             for child in node.children:
                 if child.type in {"identifier", "field_identifier", "type_identifier"}:
                     return child.text.decode("utf-8", errors="ignore")
@@ -216,7 +377,7 @@ def _emit_call_semantics(node, tokens):
     line = node.start_point[0] + 1
     if "charat(" in text:
         _append_token(tokens, "CHAR_ACCESS", line)
-    if ".append(" in text:
+    if ".append(" in text or ".push_back(" in text:
         _append_token(tokens, "ACCUM_APPEND", line)
     if ".equals(" in text:
         _append_token(tokens, "EQUALS_CALL", line)
@@ -224,12 +385,40 @@ def _emit_call_semantics(node, tokens):
         _append_token(tokens, "REPLACE_CALL", line)
     if ".tochararray(" in text:
         _append_token(tokens, "TO_CHAR_ARRAY", line)
-    if ".tolowercase(" in text:
+    if ".tolowercase(" in text or "tolower(" in text:
         _append_token(tokens, "TO_LOWER", line)
-    if ".tostring(" in text:
+    if ".touppercase(" in text or "toupper(" in text:
+        _append_token(tokens, "TO_UPPER", line)
+    if ".tostring(" in text or "to_string(" in text or "std::to_string(" in text:
         _append_token(tokens, "TO_STRING", line)
     if ".length(" in text or text.endswith("length"):
         _append_token(tokens, "LENGTH_ACCESS", line)
+    if ".size()" in text:
+        _append_token(tokens, "LENGTH_ACCESS", line)
+    if ".find(" in text:
+        _append_token(tokens, "FIND_CALL", line)
+    if ".insert(" in text:
+        _append_token(tokens, "INSERT_CALL", line)
+    if ".erase(" in text:
+        _append_token(tokens, "ERASE_CALL", line)
+    if ".begin(" in text or ".end(" in text:
+        _append_token(tokens, "ITER_ACCESS", line)
+    if ".front(" in text or ".back(" in text:
+        _append_token(tokens, "ENDPOINT_ACCESS", line)
+    if ".empty(" in text:
+        _append_token(tokens, "EMPTY_CHECK", line)
+    if ".substr(" in text or ".substring(" in text:
+        _append_token(tokens, "SUBSTR_CALL", line)
+    if "sort(" in text:
+        _append_token(tokens, "SORT_CALL", line)
+    if "reverse(" in text:
+        _append_token(tokens, "REVERSE_CALL", line)
+    if "swap(" in text:
+        _append_token(tokens, "SWAP_CALL", line)
+    if "cout" in text or "printf(" in text or "println(" in text:
+        _append_token(tokens, "PRINT_CALL", line)
+    if "cin" in text or "scanf(" in text or "getline(" in text:
+        _append_token(tokens, "INPUT_CALL", line)
 
 
 def _emit_expr_semantics(node, tokens):
@@ -252,18 +441,51 @@ def _emit_expr_semantics(node, tokens):
             _append_token(tokens, "EQ_TEST", line)
         if ">=" in text or "<=" in text or " > " in f" {text} " or " < " in f" {text} ":
             _append_token(tokens, "RANGE_TEST", line)
-    elif node_type in {"local_variable_declaration", "declaration", "variable_declarator"}:
-        if "stringbuilder" in text:
+        if "[" in text and "]" in text:
+            _append_token(tokens, "ARRAY_READ", line)
+    elif node_type in {"local_variable_declaration", "declaration", "variable_declarator", "init_declarator"}:
+        if "stringbuilder" in text or "stringstream" in text or "ostringstream" in text:
             _append_token(tokens, "ACCUM_INIT", line)
-        if "= \"\"" in text or "=''" in text:
+        if "= \"\"" in text or "=''" in text or '= ""' in text:
             _append_token(tokens, "ACCUM_INIT", line)
         if "length() - 1" in text or ".length()-1" in text:
             _append_token(tokens, "REVERSE_INDEX_INIT", line)
-    elif node_type in {"object_creation_expression"}:
+        if "= 0" in text or "=0" in text:
+            _append_token(tokens, "INIT_ZERO", line)
+        if ".size() - 1" in text or ".size()-1" in text or "- 1" in text:
+            _append_token(tokens, "INIT_HIGH", line)
+        if "vector" in text or "array" in text:
+            _append_token(tokens, "CONTAINER_INIT", line)
+        if "map" in text or "unordered_map" in text or "hashmap" in text:
+            _append_token(tokens, "MAP_INIT", line)
+        if "set" in text or "unordered_set" in text:
+            _append_token(tokens, "SET_INIT", line)
+    elif node_type in {"object_creation_expression", "new_expression"}:
         if "stringbuilder" in text:
             _append_token(tokens, "ACCUM_INIT", line)
+    elif node_type in {"subscript_expression", "array_access"}:
+        _append_token(tokens, "ARRAY_READ", line)
+    elif node_type in {"conditional_expression"}:
+        _append_token(tokens, "TERNARY_EXPR", line)
 
-def normalize_ast(node, tokens):
+
+def normalize_ast(node, tokens: list) -> None:
+    """Recursively walk a Tree-sitter AST node and emit normalised tokens.
+
+    The output is a flat list of ``{"t": token_str, "line": int, ...}`` dicts
+    appended to *tokens*.  The normalisation strategy:
+
+    - Nodes in IGNORE_NODE_TYPES (punctuation, grouping, includes) are
+      transparent — their children are visited but no token is emitted.
+    - Structural nodes (loops, methods, if-blocks, classes, switch) emit
+      bracketing tokens (LOOP_START/LOOP_END, FUNC_DEF/FUNC_END, etc.) and
+      recurse only into body children, skipping header/condition subtrees.
+    - Leaf nodes are mapped via LEXICAL_MAP (identifiers → ID, literals → NUM/STR)
+      or STRUCTURAL_MAP (expressions → ASSIGN, CALL, etc.).
+    - After emitting a structural token, _emit_expr_semantics or
+      _emit_call_semantics injects additional semantic tokens for high-signal
+      patterns (accumulators, comparisons, API calls).
+    """
     node_type = node.type
     line = node.start_point[0] + 1
 
@@ -311,20 +533,57 @@ def normalize_ast(node, tokens):
     if token_str:
         _append_token(tokens, token_str, line)
 
+    if node_type in {
+        "assignment_expression", "update_expression", "binary_expression",
+        "local_variable_declaration", "declaration", "variable_declarator",
+        "object_creation_expression", "subscript_expression", "array_access",
+        "init_declarator",
+        "new_expression",
+        "conditional_expression",
+    }:
+        _emit_expr_semantics(node, tokens)
+    elif node_type in {"method_invocation", "call_expression"}:
+        _emit_call_semantics(node, tokens)
+
     for child in node.children:
         normalize_ast(child, tokens)
 
 
+def collect_structural_spans(node, spans: list) -> None:
+    """Recursively collect all structural unit spans from the AST.
 
-def collect_structural_spans(node, spans):
+    Appends dicts of the form::
+
+        {
+            "type":         "METHOD" | "LOOP" | "IF" | "SWITCH" | "CLASS",
+            "start":        int,   # 1-based start line
+            "end":          int,   # 1-based end line
+            "name":         str | None,  # function/method name if extractable
+            "loop_subtype": str | None,  # "for" | "while" | "do_while" | "range_for"
+        }
+
+    These spans are later used by ``find_enclosing_unit`` to annotate each
+    k-gram with the structural context it lives in.
+    """
     unit_type = STRUCTURE_TYPES.get(node.type)
     if unit_type:
+        loop_subtype = None
+        if unit_type == "LOOP":
+            if node.type in {"for_statement", "enhanced_for_statement"}:
+                loop_subtype = "for"
+            elif node.type == "for_range_loop":
+                loop_subtype = "range_for"
+            elif node.type == "while_statement":
+                loop_subtype = "while"
+            elif node.type == "do_statement":
+                loop_subtype = "do_while"
         spans.append(
             {
                 "type": unit_type,
                 "start": node.start_point[0] + 1,
                 "end": node.end_point[0] + 1,
                 "name": _extract_unit_name(node),
+                "loop_subtype": loop_subtype,
             }
         )
 
@@ -332,21 +591,30 @@ def collect_structural_spans(node, spans):
         collect_structural_spans(child, spans)
 
 
-
 def _span_sort_key(span):
     length = span["end"] - span["start"] + 1
     return (UNIT_PRIORITY.get(span["type"], 999), length, span["start"], span["end"])
 
 
+def find_enclosing_unit(start_line: int, end_line: int, spans: list) -> dict | None:
+    """Return the tightest structural unit that fully encloses [start_line, end_line].
 
-def find_enclosing_unit(start_line, end_line, spans):
+    "Tightest" is defined by UNIT_PRIORITY (METHOD > LOOP > IF > SWITCH > CLASS)
+    then by shortest span length, then by earliest start line.
+    Returns None if no enclosing unit exists (e.g. top-level code).
+    """
     candidates = [span for span in spans if span["start"] <= start_line and span["end"] >= end_line]
     if not candidates:
         return None
     return min(candidates, key=_span_sort_key)
 
 
-def find_enclosing_unit_of_type(start_line, end_line, spans, allowed_types):
+def find_enclosing_unit_of_type(start_line: int, end_line: int, spans: list, allowed_types: set) -> dict | None:
+    """Like ``find_enclosing_unit`` but restricted to specific unit types.
+
+    Used to independently find the nearest enclosing LOOP and METHOD for each
+    k-gram so both can be stored in the fingerprint metadata.
+    """
     candidates = [
         span for span in spans
         if span["type"] in allowed_types and span["start"] <= start_line and span["end"] >= end_line
@@ -356,9 +624,21 @@ def find_enclosing_unit_of_type(start_line, end_line, spans, allowed_types):
     return min(candidates, key=lambda s: (s["end"] - s["start"] + 1, s["start"], s["end"]))
 
 
+def normalize_package(directory_path: str, student_id: str) -> list:
+    """Parse all supported source files in a student's submission directory.
 
-def normalize_package(directory_path, student_id):
-    valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp"}
+    Walks *directory_path* recursively, skipping macOS metadata files and
+    unsupported extensions.  For each file it:
+      1. Parses the source with Tree-sitter.
+      2. Calls ``normalize_ast`` to produce a token stream.
+      3. Calls ``collect_structural_spans`` to record unit boundaries.
+      4. Tags every token with the relative file path and student ID.
+
+    Returns a list of per-file dicts::
+
+        [{"path": str, "tokens": [...], "spans": [...]}, ...]
+    """
+    valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp", ".cxx", ".hxx", ".C"}
     files = []
 
     for root, _, filenames in os.walk(directory_path):
@@ -388,7 +668,7 @@ def normalize_package(directory_path, student_id):
             collect_structural_spans(tree.root_node, file_spans)
             file_spans.sort(key=_span_sort_key)
 
-            rel_path = os.path.basename(path)
+            rel_path = os.path.relpath(path, directory_path).replace("\\", "/")
             for tok in file_tokens:
                 tok["file"] = rel_path
                 tok["student"] = student_id
@@ -400,8 +680,21 @@ def normalize_package(directory_path, student_id):
     return file_data
 
 
+def kgrams(tokens: list, k: int, spans: list) -> list:
+    """Generate all valid k-grams from a token stream.
 
-def kgrams(tokens, k, spans):
+    A k-gram is valid if:
+    - All k tokens come from the same file (no cross-file grams).
+    - The token type diversity meets the minimum threshold (prevents
+      fingerprinting trivially uniform sequences like ``ID ID ID``).
+
+    Each returned gram is a tuple of (content_str, metadata_dict) where
+    content_str is the space-joined token type sequence and metadata carries
+    the file path, line range, and enclosing structural unit information.
+    """
+    total_tokens = len(tokens)
+    min_diversity = 2 if total_tokens < 60 else MIN_TOKEN_DIVERSITY
+
     grams = []
     for i in range(len(tokens) - k + 1):
         window = tokens[i : i + k]
@@ -410,7 +703,7 @@ def kgrams(tokens, k, spans):
             continue
 
         token_types = {t["t"] for t in window}
-        if len(token_types) < MIN_TOKEN_DIVERSITY:
+        if len(token_types) < min_diversity:
             continue
 
         start_line = window[0]["line"]
@@ -432,6 +725,7 @@ def kgrams(tokens, k, spans):
             "unit_name": unit.get("name") if unit else None,
             "loop_start": loop_unit["start"] if loop_unit else None,
             "loop_end": loop_unit["end"] if loop_unit else None,
+            "loop_subtype": loop_unit.get("loop_subtype") if loop_unit else None,
             "method_start": method_unit["start"] if method_unit else None,
             "method_end": method_unit["end"] if method_unit else None,
             "method_name": method_unit.get("name") if method_unit else None,
@@ -440,8 +734,12 @@ def kgrams(tokens, k, spans):
     return grams
 
 
+def hash_kgrams(kgrams_list: list) -> list:
+    """Hash each k-gram content string with MurmurHash3-128 (or Blake2b fallback).
 
-def hash_kgrams(kgrams_list):
+    Mutates the metadata dicts in-place by setting ``meta["hash"]`` and
+    returns the list of metadata dicts (the content strings are discarded).
+    """
     hashed_list = []
     for content_str, meta in kgrams_list:
         meta["hash"] = stable_hash128(content_str)
@@ -449,8 +747,17 @@ def hash_kgrams(kgrams_list):
     return hashed_list
 
 
+def winnow(hashed_grams: list, w: int) -> list:
+    """Select fingerprints from hashed k-grams using the Moss winnowing algorithm.
 
-def winnow(hashed_grams, w):
+    Slides a window of size *w* over the sorted hash sequence.  In each window
+    the minimum hash is selected.  Ties are broken by choosing the rightmost
+    occurrence (matching the original Moss paper).  A fingerprint is only added
+    to the output if its position in the sequence changed from the previous
+    selected minimum — this deduplicates adjacent windows with the same minimum.
+
+    Returns a list of fingerprint metadata dicts (a subset of *hashed_grams*).
+    """
     if not hashed_grams:
         return []
     if len(hashed_grams) < w:
@@ -476,7 +783,6 @@ def winnow(hashed_grams, w):
     return fingerprints
 
 
-
 def _load_zip_source_cache(zip_path):
     cache = {}
     try:
@@ -491,12 +797,10 @@ def _load_zip_source_cache(zip_path):
     return cache
 
 
-
 def _strip_comments(source: str) -> str:
     source = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), source, flags=re.DOTALL)
     source = re.sub(r"//[^\n]*", "", source)
     return source
-
 
 
 def _lookup_source(source_cache, student_id, internal_path):
@@ -511,8 +815,21 @@ def _lookup_source(source_cache, student_id, internal_path):
     return ""
 
 
+def process_zip_submission(zip_path: str, extract_root: str) -> tuple:
+    """Extract a student ZIP, tokenise all source files, and generate fingerprints.
 
-def process_zip_submission(zip_path, extract_root):
+    Args:
+        zip_path:     Path to the student's submission ZIP file.
+        extract_root: Temporary directory into which the ZIP will be extracted.
+
+    Returns:
+        (student_id, fingerprints, k_map) where:
+            student_id   — derived from the ZIP filename (student number).
+            fingerprints — list of winnowed fingerprint dicts for all files.
+            k_map        — dict mapping relative file path → k value used.
+
+    Returns (student_id, [], {}) silently if the ZIP is corrupt.
+    """
     student_id = os.path.splitext(os.path.basename(zip_path))[0]
     extract_path = os.path.join(extract_root, student_id)
     try:
@@ -542,16 +859,20 @@ def process_zip_submission(zip_path, extract_root):
         return student_id, [], {}
 
 
+def load_boilerplate_hashes(template_dir: str) -> set:
+    """Fingerprint all files in the boilerplate directory and return their hash set.
 
-def load_boilerplate_hashes(template_dir):
+    Both the winnowed fingerprints AND all raw k-gram hashes are included so
+    that even un-selected boilerplate patterns are excluded from student scoring.
+    Returns an empty set if *template_dir* does not exist or is empty.
+    """
     if not os.path.exists(template_dir) or not os.listdir(template_dir):
-        print("No template directory found — skipping boilerplate detection.")
         return set()
 
-    print(f"Loading boilerplate from: {template_dir}")
     file_data = normalize_package(template_dir, "TEMPLATE")
 
     all_fps = []
+    all_raw = []
     for file_info in file_data:
         tokens = file_info["tokens"]
         spans = file_info["spans"]
@@ -560,14 +881,17 @@ def load_boilerplate_hashes(template_dir):
         hashed = hash_kgrams(grams)
         fps = winnow(hashed, w=adaptive_window(len(tokens)))
         all_fps.extend(fps)
+        all_raw.extend(hashed)
 
-    ignored_hashes = {fp["hash"] for fp in all_fps}
-    print(f"Boilerplate fingerprints loaded: {len(ignored_hashes)} hashes will be ignored.")
-    return ignored_hashes
-
+    return {fp["hash"] for fp in all_fps} | {fp["hash"] for fp in all_raw}
 
 
-def build_inverted_index(fingerprint_db):
+def build_inverted_index(fingerprint_db: dict) -> dict:
+    """Build a hash → {student_id, …} inverted index from all fingerprints.
+
+    Used to find candidate pairs efficiently: only pairs that share at least
+    one hash need to be compared, avoiding an O(n²) all-pairs comparison.
+    """
     inverted = {}
     for student_id, fps in fingerprint_db.items():
         for fp in fps:
@@ -578,8 +902,8 @@ def build_inverted_index(fingerprint_db):
     return inverted
 
 
-
-def candidate_pairs_from_index(inverted_index):
+def candidate_pairs_from_index(inverted_index: dict) -> set:
+    """Return the set of (student_a, student_b) pairs that share at least one fingerprint hash."""
     candidates = set()
     for students in inverted_index.values():
         if len(students) > 1:
@@ -588,8 +912,13 @@ def candidate_pairs_from_index(inverted_index):
     return candidates
 
 
+def build_idf_weights(inverted_index: dict, total_students: int) -> dict:
+    """Compute IDF weights for each fingerprint hash.
 
-def build_idf_weights(inverted_index, total_students):
+    Hashes shared by many students receive a low weight (common boilerplate).
+    Hashes unique to one or two students receive a high weight (distinctive code).
+    Weight formula: 1 / log(1 + document_frequency)
+    """
     weights = {}
     for h, students in inverted_index.items():
         doc_freq = len(students)
@@ -597,8 +926,13 @@ def build_idf_weights(inverted_index, total_students):
     return weights
 
 
+def _compatible_units(fa: dict, fb: dict) -> bool:
+    """Return True if two fingerprints have compatible structural unit types.
 
-def _compatible_units(fa, fb):
+    Fingerprints from structurally incompatible contexts (e.g. a class-level
+    match paired with a loop-level match) are suppressed to reduce false positives.
+    Missing unit types on either side are treated as compatible (permissive).
+    """
     uta, utb = fa.get("unit_type"), fb.get("unit_type")
 
     if not uta or not utb:
@@ -617,7 +951,24 @@ def _compatible_units(fa, fb):
     return (uta, utb) in compatible_pairs
 
 
-def compare_fingerprints(fp_a, fp_b, idf_weights):
+def compare_fingerprints(fp_a: list, fp_b: list, idf_weights: dict) -> tuple:
+    """Compare the fingerprint sets of two students and return (score, matches).
+
+    Args:
+        fp_a:        Fingerprints for student A.
+        fp_b:        Fingerprints for student B.
+        idf_weights: Hash → weight map from ``build_idf_weights``.
+
+    Returns:
+        (score, matches) where:
+            score   — IDF-weighted Jaccard similarity in [0, 1].
+            matches — list of raw match dicts, one per shared fingerprint,
+                      carrying file paths and line ranges for both students.
+
+    Only fingerprints with compatible structural unit types (see
+    ``_compatible_units``) are included in matches to suppress false positives
+    from coincidentally identical patterns in structurally different contexts.
+    """
     map_a = {}
     for fp in fp_a:
         map_a.setdefault(fp["hash"], []).append(fp)
@@ -641,6 +992,7 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
                         "unit_name_a": fa.get("unit_name"),
                         "loop_start_a": fa.get("loop_start"),
                         "loop_end_a": fa.get("loop_end"),
+                        "loop_subtype_a": fa.get("loop_subtype"),
                         "method_start_a": fa.get("method_start"),
                         "method_end_a": fa.get("method_end"),
                         "method_name_a": fa.get("method_name"),
@@ -653,6 +1005,7 @@ def compare_fingerprints(fp_a, fp_b, idf_weights):
                         "unit_name_b": fb.get("unit_name"),
                         "loop_start_b": fb.get("loop_start"),
                         "loop_end_b": fb.get("loop_end"),
+                        "loop_subtype_b": fb.get("loop_subtype"),
                         "method_start_b": fb.get("method_start"),
                         "method_end_b": fb.get("method_end"),
                         "method_name_b": fb.get("method_name"),
@@ -760,6 +1113,8 @@ def _absorb_nested_loops(merged_blocks):
                 mb["end_a"] = max(mb["end_a"], lb["end_a"])
                 mb["start_b"] = min(mb["start_b"], lb["start_b"])
                 mb["end_b"] = max(mb["end_b"], lb["end_b"])
+                mb.setdefault("loop_subtypes_a", set()).update(lb.get("loop_subtypes_a", set()))
+                mb.setdefault("loop_subtypes_b", set()).update(lb.get("loop_subtypes_b", set()))
                 absorbed_indices.add(li)
                 break
 
@@ -784,6 +1139,8 @@ def group_and_merge_matches(matches, min_block_size=3):
             continue
 
         unique_hashes = {item["hash"] for item in items}
+        loop_subtypes_a = {item.get("loop_subtype_a") for item in items} - {None}
+        loop_subtypes_b = {item.get("loop_subtype_b") for item in items} - {None}
         merged_blocks.append(
             {
                 "file_a": file_a,
@@ -800,14 +1157,14 @@ def group_and_merge_matches(matches, min_block_size=3):
                 "unit_name_b": method_name_b if unit_type == "METHOD" else None,
                 "parent_method_name_a": method_name_a,
                 "parent_method_name_b": method_name_b,
+                "loop_subtypes_a": loop_subtypes_a,
+                "loop_subtypes_b": loop_subtypes_b,
             }
         )
 
     merged_blocks = _absorb_nested_loops(merged_blocks)
-
     merged_blocks.sort(key=lambda b: (b["file_a"], b["start_a"], b["file_b"], b["start_b"], b["unit_type_a"]))
     return merged_blocks
-
 
 
 def _names_match(a, b):
@@ -817,26 +1174,13 @@ def _names_match(a, b):
 
 
 def _method_context_compatible(block):
-    uta = block.get("unit_type_a")
-    utb = block.get("unit_type_b")
-
-    same_file = _same_logical_file(
-        block.get("file_a", ""), block.get("file_b", "")
-    )
-    if not same_file:
-        return True
-
-    if uta == "METHOD" and utb == "METHOD":
-        na = block.get("unit_name_a")
-        nb = block.get("unit_name_b")
-        if na and nb and not _names_match(na, nb):
-            return False
-
-    pma = block.get("parent_method_name_a")
-    pmb = block.get("parent_method_name_b")
-    if pma and pmb and not _names_match(pma, pmb):
-        return False
-
+    # This function is only ever called in cross-student comparisons.
+    # File paths are stored relative to each student's submission directory,
+    # so same-named files (e.g. utils.cpp from Ref E and utils.cpp from Ref F)
+    # both appear as "utils.cpp" — but they are NOT the same file.
+    # Filtering based on method-name mismatches in "same-named" files incorrectly
+    # suppresses legitimate plagiarism signals (students often rename functions
+    # to obscure copying). The density threshold in _strong_blocks is sufficient.
     return True
 
 
@@ -851,7 +1195,7 @@ def _name_score(block):
         if _names_match(na, nb):
             return 0.25
         if na and nb:
-            return -0.35
+            return -0.15
     pma = block.get("parent_method_name_a")
     pmb = block.get("parent_method_name_b")
     if _names_match(pma, pmb):
@@ -860,13 +1204,13 @@ def _name_score(block):
         return -0.25
     return 0.0
 
+
 def _compute_block_density(block):
     block_length_a = block["end_a"] - block["start_a"] + 1
     block_length_b = block["end_b"] - block["start_b"] + 1
     denom = max(block_length_a, block_length_b)
     density = block["hash_count"] / denom if denom > 0 else 0.0
     return block_length_a, block_length_b, density
-
 
 
 def _min_hashes_for_block(block_length_a, block_length_b):
@@ -889,7 +1233,6 @@ def _candidate_assignment_score(block):
         + _name_score(block)
         + min(block["hash_count"], 6) * 0.005
     )
-
 
 
 def _select_one_to_one_blocks(blocks):
@@ -971,7 +1314,9 @@ def _strong_blocks(merged_blocks):
         min_hashes = _min_hashes_for_block(block_length_a, block_length_b)
         if block["hash_count"] < min_hashes:
             continue
-        if not _method_context_compatible(block):
+
+        block_with_density = {**block, "density": density}
+        if not _method_context_compatible(block_with_density):
             continue
 
         density_threshold = UNIT_MATCH_THRESHOLD
@@ -1031,9 +1376,39 @@ def should_flag_pair(score, raw_matches):
     return False
 
 
+def _file_level_similarity(fp_a, fp_b):
+    files_a = {}
+    files_b = {}
+    for fp in fp_a:
+        files_a.setdefault(fp["file"], set()).add(fp["hash"])
+    for fp in fp_b:
+        files_b.setdefault(fp["file"], set()).add(fp["hash"])
+
+    results = []
+    for fname in files_a:
+        match_key = next(
+            (f for f in files_b if os.path.basename(f).lower() == os.path.basename(fname).lower()),
+            None
+        )
+        if not match_key:
+            continue
+        set_a = files_a[fname]
+        set_b = files_b[match_key]
+        union = set_a | set_b
+        intersection = set_a & set_b
+        if not union:
+            continue
+        similarity = len(intersection) / len(union)
+        results.append({
+            "file_a": fname,
+            "file_b": match_key,
+            "similarity": round(similarity, 3),
+            "hash_count": len(intersection),
+        })
+    return results
+
 
 def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=None):
-
     merged_blocks = group_and_merge_matches(raw_matches)
     strong = _strong_blocks(merged_blocks)
 
@@ -1081,8 +1456,8 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
                 if matches_for_file:
                     start_a = 1
                     start_b = 1
-                    end_a   = max(m["end_a"] for m in matches_for_file)
-                    end_b   = max(m["end_b"] for m in matches_for_file)
+                    end_a = max(m["end_a"] for m in matches_for_file)
+                    end_b = max(m["end_b"] for m in matches_for_file)
                 else:
                     start_a = start_b = 1
                     end_a = end_b = 1
@@ -1133,15 +1508,14 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
         short_block = short_len <= 8
         hash_count = block["hash_count"]
         confidence = "LOW"
-        # Three-tier thresholds based on block length:
-        #   short  (<=8 lines):  HIGH>=0.45 + hash>=4, MEDIUM>=0.30
-        #   medium (9-20 lines): HIGH>=0.65,            MEDIUM>=0.45
-        #   long   (21+ lines):  HIGH>=0.75,            MEDIUM>=0.55
         if short_block:
-            high_thresh, med_thresh = 0.45, 0.30
-            high_hash_ok = hash_count >= 4
+            high_thresh, med_thresh = 0.38, 0.25
+            high_hash_ok = hash_count >= 3
         elif short_len <= 20:
-            high_thresh, med_thresh = 0.65, 0.45
+            high_thresh, med_thresh = 0.50, 0.28
+            high_hash_ok = True
+        elif short_len <= 40:
+            high_thresh, med_thresh = 0.60, 0.35
             high_hash_ok = True
         else:
             high_thresh, med_thresh = 0.75, 0.55
@@ -1151,6 +1525,13 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
             high_conf_blocks += 1
         elif density >= med_thresh:
             confidence = "MEDIUM"
+
+        if confidence == "HIGH":
+            lsa = block.get("loop_subtypes_a", set())
+            lsb = block.get("loop_subtypes_b", set())
+            if lsa and lsb and lsa != lsb:
+                confidence = "MEDIUM"
+                high_conf_blocks -= 1
 
         density_sum += density
         total_lines_a += block_length_a
@@ -1221,42 +1602,34 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
     }
 
 
-def _file_level_similarity(fp_a, fp_b):
-    files_a = {}
-    files_b = {}
-    for fp in fp_a:
-        files_a.setdefault(fp["file"], set()).add(fp["hash"])
-    for fp in fp_b:
-        files_b.setdefault(fp["file"], set()).add(fp["hash"])
+def run_engine(submissions_folder: str, boilerplate_folder: str | None = None,
+               similarity_threshold: float = 0.15, parallel: bool = True) -> dict:
+    """Run the full plagiarism detection pipeline on a folder of student ZIPs.
 
-    results = []
-    for fname in files_a:
-        match_key = next(
-            (f for f in files_b if os.path.basename(f).lower() == os.path.basename(fname).lower()),
-            None
-        )
-        if not match_key:
-            continue
-        set_a = files_a[fname]
-        set_b = files_b[match_key]
-        union = set_a | set_b
-        intersection = set_a & set_b
-        if not union:
-            continue
-        similarity = len(intersection) / len(union)
-        results.append({
-            "file_a": fname,
-            "file_b": match_key,
-            "similarity": round(similarity, 3),
-            "hash_count": len(intersection),
-        })
-    return results
+    This is the top-level entry point called by the analysis service.
 
-def run_engine(submissions_folder, boilerplate_folder=None,
-               similarity_threshold=0.15, parallel=True):
-    """Run the plagiarism detection pipeline.
+    Pipeline steps executed here:
+        1. Load boilerplate hashes (if a boilerplate folder is provided).
+        2. Extract and fingerprint all student ZIP submissions — in parallel
+           using ``ProcessPoolExecutor`` when ``parallel=True``.
+        3. Subtract boilerplate hashes from every student's fingerprint set.
+        4. Build the inverted index and compute IDF weights.
+        5. Identify candidate pairs (those sharing ≥ 1 hash).
+        6. Compare each candidate pair with ``compare_fingerprints``.
+        7. Merge raw matches into structured MatchBlocks and assign confidence.
+        8. Filter pairs below *similarity_threshold*.
 
-    Returns dict with ``metadata`` and ``pairs`` keys.
+    Args:
+        submissions_folder:  Path to a directory of ``{student_number}.zip`` files.
+        boilerplate_folder:  Optional path to a directory of boilerplate source files.
+        similarity_threshold: Minimum IDF-Jaccard score to include a pair in results.
+        parallel:            If True, use multiprocessing for fingerprint extraction.
+
+    Returns:
+        A dict with keys:
+            "metadata": summary statistics (student count, pair count, thresholds).
+            "pairs":    list of pair result dicts, each containing similarity,
+                        matched blocks, source files, and per-student line maps.
     """
     boilerplate_hashes = load_boilerplate_hashes(boilerplate_folder) if boilerplate_folder else set()
 
@@ -1297,6 +1670,12 @@ def run_engine(submissions_folder, boilerplate_folder=None,
     all_ids = list(fingerprint_db.keys())
     real_ids = [s for s in all_ids if not s.startswith("_ref_")]
     ref_ids = [s for s in all_ids if s.startswith("_ref_")]
+
+    # If there are no real student submissions, compare references against each
+    # other (useful for testing or when refs are the only available data).
+    if not real_ids and ref_ids:
+        real_ids = ref_ids
+        ref_ids = []
 
     total_students = len(fingerprint_db)
     inverted_index = build_inverted_index(fingerprint_db)

@@ -1,3 +1,15 @@
+"""
+Pydantic schemas for API request bodies and response models.
+
+Naming conventions
+------------------
+*Request   — used as FastAPI request body (POST/PUT).
+*Response  — used as FastAPI response_model.
+
+All ObjectId fields from MongoDB are serialized to plain strings in responses
+so they are JSON-serializable without custom encoders.
+"""
+
 import re
 from datetime import datetime
 from typing import Optional
@@ -111,15 +123,16 @@ class UniversityUpdate(BaseModel):
 class CourseCreate(BaseModel):
     code: str = Field(min_length=1)
     title: str = Field(min_length=1)
-    term: str = Field(min_length=1)
     description: Optional[str] = None
+    end_date: datetime  # required; term is auto-computed from end_date
 
 
 class CourseUpdate(BaseModel):
     code: Optional[str] = None
     title: Optional[str] = None
-    term: Optional[str] = None
     description: Optional[str] = None
+    # term and end_date are intentionally omitted — both are derived/immutable
+    # after course creation. Changes require contacting the Academic FBI help center.
 
 
 class CourseResponse(BaseModel):
@@ -131,6 +144,8 @@ class CourseResponse(BaseModel):
     instructor_email: str
     instructor_name: str
     created_at: datetime
+    end_date: Optional[datetime] = None
+    expiry_status: Optional[str] = None  # "active" | "expiring_soon" | "grace_period" | "data_deleted"
 
 
 class InstructorDashboardStats(BaseModel):

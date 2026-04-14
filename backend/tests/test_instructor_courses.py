@@ -6,28 +6,46 @@ from bson import ObjectId
 
 from tests.helpers import TEST_UNI_SLUG, auth_header
 
+# A future end_date used across course creation tests
+_END_DATE = "2026-12-15T12:00:00Z"
+
 
 class TestCourseCreate:
     async def test_create_course(self, client, instructor_token, seed_instructor):
         resp = await client.post(
             "/api/instructor/courses",
             headers=auth_header(instructor_token),
-            json={"code": "CS200", "title": "Data Structures", "term": "Fall 2026"},
+            json={"code": "CS200", "title": "Data Structures", "end_date": _END_DATE},
         )
         assert resp.status_code == 201
         data = resp.json()
         assert data["code"] == "CS200"
         assert data["instructor_email"] == "instructor@test.com"
+        # term is auto-computed — just verify it is present and non-empty
+        assert data["term"]
 
     async def test_create_duplicate_course(
         self, client, instructor_token, sample_course
     ):
+        # sample_course is CS101 — creating it again via the API should conflict.
+        # We must include end_date so the term auto-computes to the same value
+        # stored in sample_course ("Winter 2026"), triggering the 409.
         resp = await client.post(
             "/api/instructor/courses",
             headers=auth_header(instructor_token),
-            json={"code": "CS101", "title": "Whatever", "term": "Winter 2026"},
+            json={"code": "CS101", "title": "Whatever", "end_date": "2026-04-30T12:00:00Z"},
         )
         assert resp.status_code == 409
+
+    async def test_create_course_missing_end_date(
+        self, client, instructor_token, seed_instructor
+    ):
+        resp = await client.post(
+            "/api/instructor/courses",
+            headers=auth_header(instructor_token),
+            json={"code": "CS300", "title": "No End Date"},
+        )
+        assert resp.status_code == 422
 
 
 class TestCourseList:

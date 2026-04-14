@@ -100,8 +100,8 @@ const pageStyles = `
 .dotLabel::before {content:'';width:5px;height:5px;background:var(--accent);border-radius:50%;display:inline-block; }
 
 .howOuter {overflow:hidden; padding:112px 48px;}
-.howRow {display:flex; align-items:center; justify-content:center; flex-wrap:nowrap; margin:72px auto 0; width:100%; }
-.stepNode {position:relative; flex:1; display:flex; justify-content:center; opacity:0; transform:scale(.5) translateY(28px); transition:opacity .65s ease,transform .75s cubic-bezier(.34,1.56,.64,1);}
+.howRow {display:flex; align-items:center; justify-content:center; flex-wrap:wrap; margin:72px auto 0; width:100%; gap:24px; }
+.stepNode {position:relative; flex:1; min-width:200px; display:flex; justify-content:center; opacity:0; transform:scale(.5) translateY(28px); transition:opacity .65s ease,transform .75s cubic-bezier(.34,1.56,.64,1);}
 .stepNode.on {opacity:1; transform:scale(1) translateY(0);}
 .circleOuter {width:290px;height:290px;border-radius:50%;background:var(--accentDim);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 44px var(--accentGlow);transition:transform .3s,box-shadow .3s,background .4s;cursor:default; }
 .circleOuter:hover {transform:scale(1.06); box-shadow:0 18px 60px var(--accentGlow);}
@@ -110,6 +110,14 @@ const pageStyles = `
 .stepText {font-size:12px;line-height:1.6;color:var(--fg2);margin-top:5px;}
 .stepArrow { flex-shrink:0;width:60px;display:flex;align-items:center;justify-content:center;opacity:0;transform:translateX(-10px);transition:opacity .4s ease,transform .4s ease; }
 .stepArrow.on {opacity:1; transform:translateX(0);}
+
+@media (max-width: 768px) {
+  .howOuter { padding: 64px 24px; }
+  .howRow { margin-top: 40px; }
+  .stepArrow { display: none; }
+  .circleOuter { width: 200px; height: 200px; }
+  .circleInner { width: 162px; height: 162px; padding: 18px; }
+}
 
 .ringTrack {fill:none;stroke-width:3;stroke:var(--borderS);}
 .ringFill { fill:none;stroke-width:3;stroke:#ef4444;stroke-linecap:round;stroke-dasharray:101;stroke-dashoffset:25; }
@@ -330,12 +338,12 @@ export default function Page() {
 
 
         {/* -------HERO----- */}
-        <section className="relative min-h-screen flex items-center px-12 pt-32 pb-28 overflow-hidden">
+        <section className="relative min-h-screen flex items-center px-5 sm:px-8 lg:px-12 pt-24 sm:pt-28 lg:pt-32 pb-16 sm:pb-20 lg:pb-28 overflow-hidden">
           <div className="heroGrid" />
           <div className="absolute rounded-full pointer-events-none blob1" style={{ width: 500, height: 500, background: "var(--accentGlow)", filter: "blur(110px)", top: "-8%", right: "-3%" }} />
           <div className="absolute rounded-full pointer-events-none blob2" style={{ width: 320, height: 320, background: "var(--accentDim)", filter: "blur(110px)", bottom: 0, left: "-4%" }} />
 
-          <div className="relative z-10 grid grid-cols-2 gap-20 items-center max-w-[1280px] mx-auto w-full">
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center max-w-[1280px] mx-auto w-full">
             {/* Lefttext */}
             <div key={"l" + animKey}>
               <div className="inline-flex items-center gap-2 rounded px-3 py-1.5 mb-7 mono text-[10px] tracking-[0.2em] uppercase fadeUp1"
@@ -370,7 +378,7 @@ export default function Page() {
             </div>
 
             {/* Right cards */}
-            <div key={"r" + animKey} className="relative h-[600px]">
+            <div key={"r" + animKey} className="relative h-[600px] hidden lg:block">
               {/* Card 1 drops from top */}
               <div className="absolute rounded-2xl p-7 dropIn" style={{ width: 295, top: 0, left: 0, minHeight: 240, background: "var(--card)", border: "1px solid var(--borderS)", boxShadow: "0 28px 64px var(--shadowS)", transition: "background .4s ease, border-color .4s ease" }}>
                 <div className="dotLabel mono text-[9px] tracking-[0.18em] uppercase flex items-center gap-1.5 mb-5" style={{ color: "var(--accent)" }}>Student Submission</div>
@@ -447,21 +455,21 @@ export default function Page() {
                 <option value="">{unisLoading ? "Loading..." : "Select your university"}</option>
                 {unis.map(u => <option key={u.id} value={u.slug}>{u.name}</option>)}
               </select>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <button disabled={!selectedUni} onClick={() => router.push(`/login?university=${selectedUni}&role=instructor`)}
-                  className="flex flex-col items-center gap-2 px-4 py-5 rounded-xl text-[12px] font-medium transition-all disabled:opacity-25 hover:scale-[1.03]"
+                  className="flex flex-col items-center gap-2 px-2 sm:px-4 py-4 sm:py-5 rounded-xl text-[11px] sm:text-[12px] font-medium transition-all disabled:opacity-25 hover:scale-[1.03]"
                   style={{ background: "var(--card)", border: "1px solid var(--borderS)", color: "var(--fg2)" }}>
-                  <GraduationCap size={22} className="text-orange-500 dark:text-cyan-400" /> Instructor
+                  <GraduationCap size={20} className="text-orange-500 dark:text-cyan-400" /> Instructor
                 </button>
                 <button disabled={!selectedUni} onClick={() => router.push(`/login?university=${selectedUni}&role=admin`)}
-                  className="flex flex-col items-center gap-2 px-4 py-5 rounded-xl text-[12px] font-medium transition-all disabled:opacity-25 hover:scale-[1.03]"
+                  className="flex flex-col items-center gap-2 px-2 sm:px-4 py-4 sm:py-5 rounded-xl text-[11px] sm:text-[12px] font-medium transition-all disabled:opacity-25 hover:scale-[1.03]"
                   style={{ background: "var(--card)", border: "1px solid var(--borderS)", color: "var(--fg2)" }}>
-                  <UserCog size={22} className="text-orange-500 dark:text-cyan-400" /> Administrator
+                  <UserCog size={20} className="text-orange-500 dark:text-cyan-400" /> Administrator
                 </button>
                 <button disabled={!selectedUni} onClick={() => router.push(`/submit?university=${selectedUni}`)}
-                  className="flex flex-col items-center gap-2 px-4 py-5 rounded-xl text-[12px] font-medium transition-all disabled:opacity-25 hover:scale-[1.03]"
+                  className="flex flex-col items-center gap-2 px-2 sm:px-4 py-4 sm:py-5 rounded-xl text-[11px] sm:text-[12px] font-medium transition-all disabled:opacity-25 hover:scale-[1.03]"
                   style={{ background: "var(--card)", border: "1px solid var(--borderS)", color: "var(--fg2)" }}>
-                  <Upload size={22} className="text-orange-500 dark:text-cyan-400" /> Submit Work
+                  <Upload size={20} className="text-orange-500 dark:text-cyan-400" /> Submit Work
                 </button>
               </div>
               <p className="mt-4 text-[11px]" style={{ color: "var(--muted)" }}>
@@ -511,8 +519,8 @@ export default function Page() {
         </section>
 
         {/* ----------PRIVACY---------*/}
-        <section className="py-16 px-12" style={{ background: "var(--bg2)", transition: "background .4s ease" }}>
-          <div className="max-w-[1240px] mx-auto grid grid-cols-2 gap-16 items-center">
+        <section className="py-12 sm:py-16 px-5 sm:px-8 lg:px-12" style={{ background: "var(--bg2)", transition: "background .4s ease" }}>
+          <div className="max-w-[1240px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
             <div className="revealLeft">
               <TagLine label="Privacy by Design"/>
               <h2 className="playfair mb-6" style={{ fontSize: "clamp(2rem,3.8vw,3.8rem)", lineHeight: 1.12, letterSpacing: "-.02em" }}>
@@ -560,9 +568,9 @@ export default function Page() {
         
 
         {/* ----------tEAM---------- */}
-        <section className="py-28 px-12" style={{ background: "var(--bg2)", transition: "background .4s ease" }}>
+        <section className="py-16 sm:py-20 lg:py-28 px-5 sm:px-8 lg:px-12" style={{ background: "var(--bg2)", transition: "background .4s ease" }}>
           <div className="max-w-[1240px] mx-auto">
-            <div className="grid grid-cols-2 gap-16 items-end mb-14">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-16 items-end mb-10 lg:mb-14">
               <div>
                 <TagLine label="Our Team" />
                 <h2 className="playfair" style={{ fontSize: "clamp(2rem,3.8vw,3.8rem)", lineHeight: 1.12, letterSpacing: "-.02em" }}>
@@ -574,14 +582,14 @@ export default function Page() {
                 A core team of seven - developers, designers, and a leader who built this software for universities.
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {team.map(member => <RoleCard key={member.title} {...member} />)}
             </div>
           </div>
         </section>
 
         {/* ------------ CTA --------- */}
-        <section className="relative text-center py-32 px-12 overflow-hidden" style={{ transition: "background .4s ease" }}>
+        <section className="relative text-center py-16 sm:py-24 lg:py-32 px-5 sm:px-8 lg:px-12 overflow-hidden" style={{ transition: "background .4s ease" }}>
           <div className="absolute inset-0 pointer-events-none"
                style={{ background: "radial-gradient(ellipse 60% 60% at 50% 50%,var(--accentGlow),transparent 65%)" }} />
           <div className="relative max-w-[1240px] mx-auto">

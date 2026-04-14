@@ -231,6 +231,7 @@ async def run_analysis_background(db, run_id: ObjectId, slug: str,
     """
     temp_dir = None
     try:
+        logger.warning("=== run_analysis_background STARTED run_id=%s assignment=%s ===", run_id, assignment_id)
         temp_dir = await prepare_submission_zips(db, slug, course_id, assignment_id)
         await include_reference_submissions(db, temp_dir, slug, course_id, assignment_id)
 
@@ -274,11 +275,15 @@ async def run_analysis_background(db, run_id: ObjectId, slug: str,
 
         # Run engine in executor (CPU-bound)
         loop = asyncio.get_event_loop()
+        logger.warning("=== calling run_engine parallel=False temp_dir=%s ===", temp_dir)
         report = await loop.run_in_executor(
             None,
             partial(run_engine, temp_dir, template_folder,
-                    similarity_threshold=similarity_threshold),
+                    similarity_threshold=similarity_threshold, parallel=False),
         )
+        logger.warning("=== run_engine returned: total_students=%s pairs=%s ===",
+                       report.get('metadata', {}).get('total_students'),
+                       len(report.get('pairs', [])))
 
         await db.analysis_runs.update_one(
             {"_id": run_id},
