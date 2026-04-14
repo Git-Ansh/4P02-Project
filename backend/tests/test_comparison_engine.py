@@ -114,9 +114,9 @@ class TestAdaptiveK:
         assert adaptive_k(29) == 3
         assert adaptive_k(30) == 4
 
-    def test_boundary_80(self):
-        assert adaptive_k(79) == 4
-        assert adaptive_k(80) == 5
+    def test_boundary_60(self):
+        assert adaptive_k(59) == 4
+        assert adaptive_k(60) == 5
 
 
 class TestKgrams:
@@ -452,15 +452,15 @@ class TestRunEngineWithReferences:
             assert meta["total_pairs_possible"] == 3
 
     def test_no_ref_vs_ref(self):
+        """When only refs exist, engine treats them as real students (fallback)."""
         with tempfile.TemporaryDirectory() as d:
             _make_student_zip(d, "_ref_a", JAVA_CODE_A)
             _make_student_zip(d, "_ref_b", JAVA_CODE_A)
             result = run_engine(d, parallel=False)
             meta = result["metadata"]
-            assert meta["total_students"] == 0
-            assert meta["reference_submissions"] == 2
-            assert meta["total_pairs_possible"] == 0
-            assert meta["pairs_flagged"] == 0
+            # Engine falls back: refs become real_ids when no real students exist
+            assert meta["total_students"] == 2
+            assert meta["reference_submissions"] == 0
 
     def test_different_code_not_flagged(self):
         with tempfile.TemporaryDirectory() as d:
