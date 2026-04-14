@@ -1,3 +1,16 @@
+/**
+ * @file university-theme.ts
+ * Utilities for fetching and applying per-university brand themes.
+ *
+ * Each university can configure a `primary_color` and `secondary_color`
+ * (hex strings) via the admin panel.  These are applied as CSS custom
+ * property overrides on the student submission portal so the UI matches
+ * the institution's branding (logo, button colours, accent colours).
+ *
+ * Theme results are cached in a module-level object so that navigating
+ * between pages of the same university does not trigger repeated API calls.
+ */
+
 import { apiFetch } from "./api";
 
 export interface UniversityTheme {
@@ -11,6 +24,11 @@ export interface UniversityTheme {
 // Cache to avoid refetching on every page navigation
 const cache: Record<string, UniversityTheme> = {};
 
+/**
+ * Fetch the theme for a university by slug.
+ * Results are cached for the lifetime of the page session.
+ * Returns `null` if the slug is unknown or the request fails.
+ */
 export async function getUniversityTheme(
   slug: string,
 ): Promise<UniversityTheme | null> {

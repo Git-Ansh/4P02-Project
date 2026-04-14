@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * @file block-navigator.tsx
+ * Prev / Next navigation control for stepping through matched code blocks
+ * in the pair detail view.
+ *
+ * Renders a "Block X of N" counter with Prev/Next buttons and an optional
+ * confidence badge for the currently focused block.  Both buttons are
+ * disabled at the respective boundary (first / last block).
+ */
+
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SeverityBadge } from "./severity-badge";

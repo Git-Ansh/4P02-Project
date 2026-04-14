@@ -1,3 +1,21 @@
+"""
+Super-admin API router — /api/super-admin/*
+
+Restricted to users with role == "super_admin" (platform operators only).
+Super-admins sit above university administrators and have cross-institution
+visibility.
+
+Responsibilities
+----------------
+- Create, update, and deactivate universities.
+- Create university administrator accounts within a university.
+- View all universities and their administrator lists.
+- Seed or manage global platform configuration.
+
+There is typically only one super-admin account per deployment, created via
+the ``scripts/seed_super_admin.py`` management script.
+"""
+
 from datetime import datetime, timezone
 
 from bson import ObjectId

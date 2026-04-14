@@ -1,6 +1,37 @@
 "use client";
 
 /**
+ * @file code-diff-viewer.tsx
+ * Side-by-side source code viewer with matched-block highlighting.
+ *
+ * Architecture
+ * ------------
+ * `CodeDiffViewer` (exported) — top-level component.  Accepts a `pair` object
+ * and the currently active file pair, renders two `Panel` columns side-by-side,
+ * and auto-scrolls both panels to the focused block when `focusedBlockId` changes.
+ *
+ * `Panel` (internal) — renders one student's source file as an HTML table where
+ * each row is one source line.  Highlighted rows belong to a matched block; the
+ * currently focused block's rows are rendered with a brighter background.
+ *
+ * `BlockTooltip` (internal) — a fixed-position overlay shown on hover over any
+ * line in the currently focused (clicked) block.  Displays confidence, density,
+ * line ranges, and how many other flagged pairs share the same code pattern.
+ *
+ * Comment stripping
+ * -----------------
+ * `stripComments` removes line and block comments before display so that
+ * comment-only plagiarism does not show up as matched lines.  The original
+ * 1-based line numbers are preserved so that block highlights (which reference
+ * line numbers from the engine) still align correctly.
+ *
+ * Scroll behaviour
+ * ----------------
+ * When `focusedBlockId` changes a `requestAnimationFrame` callback scrolls
+ * each panel to position the first line of the focused block at ~30% from
+ * the top of the visible area.  Row height is a fixed 18 px (set by
+ * `leading-[18px]`) so no DOM measurement is needed.
+ *
  * Code diff viewer — renders exactly like the codesim_viewer reference.
  *
  * Takes a `pair` object and an `activeFile` (one of the file names from

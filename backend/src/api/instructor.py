@@ -1,9 +1,42 @@
+"""
+Instructor API router — /api/instructor/*
+
+All routes require a valid JWT with role == "instructor" or
+role == "university_admin" (admins inherit instructor capabilities).
+
+Functional areas
+----------------
+Courses
+    CRUD for courses; list enrolled instructors.
+
+Assignments
+    Create / update / delete assignments; set deadlines, language, and
+    resubmission policy; generate assignment keys (tokens) for students.
+
+Submissions
+    List all submissions for an assignment; download individual or bulk
+    (anonymized ZIP) submissions; delete a submission.
+
+References & Boilerplate
+    Upload comparison repositories (ZIP-of-ZIPs) and boilerplate code
+    files that the engine will fingerprint and exclude from scoring.
+
+Analysis
+    Trigger a similarity analysis job (runs in a background thread);
+    poll job status; retrieve the full analysis report (pairs, blocks,
+    aggregate stats); open a specific flagged pair; request or approve
+    identity reveal for anonymized students.
+"""
+
 import asyncio
 import os
 import shutil
 import threading
 import zipfile
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+TORONTO_TZ = ZoneInfo("America/Toronto")
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -114,7 +147,101 @@ def _parse_object_id(value: str) -> ObjectId:
         )
 
 
+def _term_for_month(month: int) -> str:
+    """Map a calendar month to its academic term name."""
+    if month <= 4:
+        return "Winter"
+    if month <= 7:
+        return "Summer"
+    return "Fall"
+
+
+def _compute_term(end_date: datetime, created_at: datetime) -> str:
+    """Auto-derive the academic term label from the course creation and end dates.
+
+    All comparisons are made in Toronto local time so the term boundary
+    matches the academic calendar as experienced in Toronto.
+
+    Single-term examples
+    --------------------
+    Created Feb, ends Apr  → "Winter 2026"
+    Created Sep, ends Dec  → "Fall 2026"
+    Created Jun, ends Jul  → "Summer 2026"
+
+    Multi-term examples
+    -------------------
+    Created Aug, ends Apr next year → "Fall/Winter 2025-2026"
+    Created Jan, ends Dec same year → "Winter/Fall 2026"
+    """
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+
+    # Convert to Toronto local time for month/year extraction
+    end_toronto = end_date.astimezone(TORONTO_TZ)
+    start_toronto = created_at.astimezone(TORONTO_TZ)
+
+    start_term = _term_for_month(start_toronto.month)
+    end_term = _term_for_month(end_toronto.month)
+    start_year = start_toronto.year
+    end_year = end_toronto.year
+
+    if start_term == end_term and start_year == end_year:
+        return f"{end_term} {end_year}"
+
+    if start_year == end_year:
+        return f"{start_term}/{end_term} {end_year}"
+
+    return f"{start_term}/{end_term} {start_year}-{end_year}"
+
+
+def _compute_expiry_status(end_date) -> str | None:
+    """Return an expiry status string based on the course end_date.
+
+    Comparison is done in Toronto local time: a course whose end_date is
+    April 30 expires at end-of-day April 30 Toronto time, not UTC midnight.
+
+    Returns
+    -------
+    None            — no end_date set (course is active indefinitely)
+    "expiring_soon" — end_date is in the future but ≤ 15 days away
+    "grace_period"  — end_date has passed, ≤ 30 days ago (download window)
+    "data_deleted"  — end_date + 30 days has passed (submissions deleted)
+    """
+    if end_date is None:
+        return None
+
+    # Current moment in Toronto
+    now_toronto = datetime.now(TORONTO_TZ)
+
+    # Normalise end_date to Toronto-aware
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    end_toronto = end_date.astimezone(TORONTO_TZ)
+
+    # Treat expiry as end-of-day in Toronto (midnight at the start of the next day)
+    from datetime import date as _date
+    end_of_day = datetime(
+        end_toronto.year, end_toronto.month, end_toronto.day,
+        23, 59, 59, tzinfo=TORONTO_TZ
+    )
+
+    delta = end_of_day - now_toronto  # positive = future
+    if delta.total_seconds() > 0:
+        if delta.days <= 15:
+            return "expiring_soon"
+        return None  # active, not yet close to expiry
+
+    # Past end-of-day on end_date
+    days_past = (-delta).days
+    if days_past <= 30:
+        return "grace_period"
+    return "data_deleted"
+
+
 def _doc_to_course(doc: dict) -> CourseResponse:
+    end_date = doc.get("end_date")
     return CourseResponse(
         id=str(doc["_id"]),
         code=doc["code"],
@@ -124,6 +251,8 @@ def _doc_to_course(doc: dict) -> CourseResponse:
         instructor_email=doc["instructor_email"],
         instructor_name=doc["instructor_name"],
         created_at=doc["created_at"],
+        end_date=end_date,
+        expiry_status=_compute_expiry_status(end_date),
     )
 
 
@@ -300,24 +429,37 @@ async def create_course(body: CourseCreate, user: dict = Depends(_instructor)):
         [("code", 1), ("term", 1)], unique=True
     )
 
-    existing = await db.courses.find_one({"code": body.code, "term": body.term})
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Course {body.code} already exists for {body.term}",
-        )
-
     instructor = await db.users.find_one({"email": user["sub"]})
     instructor_name = instructor["full_name"] if instructor else user["sub"]
 
+    now = datetime.now(TORONTO_TZ)
+
+    # Normalize end_date to noon Toronto time on the correct calendar day.
+    # A date picker sending "2026-04-30T00:00:00Z" (UTC midnight) is April 29
+    # at 8 PM Toronto — we re-anchor to April 30 12:00:00 Toronto (= 16:00 UTC),
+    # which stays on the correct date in UTC and avoids any midnight-crossing issues.
+    raw = body.end_date.astimezone(TORONTO_TZ)
+    end_date_normalized = datetime(
+        raw.year, raw.month, raw.day, 12, 0, 0, tzinfo=TORONTO_TZ
+    )
+
+    term = _compute_term(end_date_normalized, now)
+
+    existing = await db.courses.find_one({"code": body.code, "term": term})
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Course {body.code} already exists for {term}",
+        )
     doc = {
         "code": body.code,
         "title": body.title,
-        "term": body.term,
+        "term": term,
         "description": body.description,
+        "end_date": end_date_normalized,
         "instructor_email": user["sub"],
         "instructor_name": instructor_name,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": now,
     }
     result = await db.courses.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -355,7 +497,7 @@ async def update_course(
             detail="Course not found",
         )
 
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if not updates:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

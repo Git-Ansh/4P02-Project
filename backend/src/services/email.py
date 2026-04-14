@@ -1,3 +1,26 @@
+"""
+Transactional email service.
+
+Provider selection (in priority order)
+---------------------------------------
+1. Brevo (Sendinblue) — preferred.  Used when BREVO_API_KEY and
+   BREVO_FROM_EMAIL are set in the environment.
+2. SMTP — fallback.  Used when SMTP_HOST, SMTP_USER, and SMTP_PASSWORD
+   are set.
+3. No-op — if neither provider is configured, emails are silently skipped
+   and a log line is emitted.  This allows the server to run in dev/test
+   environments without email credentials.
+
+All public send_* functions swallow exceptions internally and log them,
+so a transient email failure never propagates to the API caller.
+
+Emails sent
+-----------
+- Submission receipt  — sent to a student after a successful file upload.
+- Assignment token    — sent to a student with their personalised
+                        submission link and optional resubmission notice.
+"""
+
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart

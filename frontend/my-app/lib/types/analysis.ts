@@ -1,3 +1,10 @@
+/**
+ * @file analysis.ts
+ * TypeScript types for the analysis engine's output, mirroring the backend
+ * Pydantic schemas returned by the instructor analysis API endpoints.
+ */
+
+/** Aggregate statistics from a completed analysis run. */
 export interface AnalysisMetadata {
   total_students: number;
   total_pairs_possible: number;
@@ -7,6 +14,18 @@ export interface AnalysisMetadata {
   boilerplate_hashes_filtered: number;
 }
 
+/**
+ * A single matched code block between two students.
+ *
+ * - `file_a` / `file_b`: relative source file paths for each student.
+ * - `start_a/end_a`, `start_b/end_b`: 1-based line ranges of the match.
+ * - `density`: fraction of the block's fingerprints that are shared (0–1).
+ * - `confidence`: engine-assigned severity level.
+ *   - `FILE`   — entire file is near-identical.
+ *   - `HIGH`   — dense match inside a named function or class.
+ *   - `MEDIUM` — moderate match.
+ *   - `LOW`    — sparse or short match.
+ */
 export interface MatchBlock {
   block_id: number;
   file_a: string;
@@ -22,6 +41,7 @@ export interface MatchBlock {
   confidence: "HIGH" | "MEDIUM" | "LOW" | "FILE";
 }
 
+/** Per-pair summary counters shown in the pair list and detail header. */
 export interface PairSummary {
   total_blocks: number;
   high_confidence_blocks: number;
@@ -30,6 +50,18 @@ export interface PairSummary {
   average_density: number;
 }
 
+/**
+ * Full data for a single flagged student pair.
+ *
+ * - `similarity`: IDF-weighted Jaccard score in [0, 1].
+ * - `severity_score`: normalised composite score used for UI colouring.
+ * - `blocks`: ordered list of matched code regions.
+ * - `files`: `{ studentId → { fileName → [{block_id, start, end}] } }` —
+ *   maps each file to the blocks that appear in it, per student.
+ *   Used by the diff viewer to build per-tab highlight maps.
+ * - `sources`: `{ studentId → { fileName → sourceCode } }` —
+ *   raw (comment-stripped) source text for display in the diff viewer panels.
+ */
 export interface AnalysisPair {
   pair_id: string;
   student_1: string;
@@ -42,6 +74,7 @@ export interface AnalysisPair {
   sources: Record<string, Record<string, string>>;
 }
 
+/** Top-level analysis job record returned by `GET /api/instructor/.../analysis`. */
 export interface AnalysisReport {
   id: string;
   status: "running" | "completed" | "failed";

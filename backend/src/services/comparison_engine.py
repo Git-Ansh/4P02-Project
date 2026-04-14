@@ -1,3 +1,76 @@
+"""
+Source-code similarity comparison engine.
+
+Pipeline overview
+-----------------
+Given a set of student ZIP archives for a single assignment, the engine
+produces a list of flagged submission pairs ordered by similarity score.
+
+Step 1 — Tokenisation (per file)
+    Each source file is parsed by Tree-sitter into an AST.  The AST is walked
+    to emit a stream of structural tokens (FUNC_DEF, LOOP_START, IF, RETURN,
+    …) rather than raw source text.  Identifiers, literals, and type names are
+    normalised via LEXICAL_MAP so that trivially renamed variables do not evade
+    detection.
+
+Step 2 — Semantic enrichment
+    After structural tokenisation a second pass adds semantic tokens for
+    patterns that carry high plagiarism signal: method calls, accumulator
+    patterns (e.g. ``sum += x``), and common API usage.  These tokens are
+    injected inline so they participate in fingerprinting.
+
+Step 3 — Adaptive k-gram hashing
+    The token stream is split into overlapping k-grams.  The value of k is
+    chosen adaptively based on the file's token count (ADAPTIVE_K_THRESHOLDS):
+    smaller files use k=3 so short snippets are still detectable; large files
+    use up to k=9 to reduce false positives from common boilerplate.
+    Each k-gram is hashed with MurmurHash3-128 (Blake2b fallback if mmh3 is
+    unavailable).
+
+Step 4 — Winnowing (fingerprint selection)
+    The Moss-style winnowing algorithm slides a window of size w over the
+    hash sequence and selects the minimum hash in each window.  This reduces
+    the fingerprint set while preserving coverage.  Tie-breaking prefers the
+    rightmost occurrence, matching the original Moss specification.
+
+Step 5 — IDF-weighted Jaccard similarity
+    For each candidate pair (pairs sharing at least one hash) the engine
+    computes a weighted Jaccard score.  Hashes that appear in many submissions
+    contribute less to the score (IDF weighting) so common boilerplate patterns
+    are down-weighted relative to rare, distinctive code.
+
+Step 6 — Unit-aware block merging
+    Matching fingerprints are mapped back to source line ranges.  Contiguous
+    or overlapping line ranges within the same structural unit (method, loop,
+    conditional block) are merged into a single MatchBlock.  Each block is
+    assigned a confidence level:
+        FILE   — entire file is near-identical (similarity ≥ FILE_SIMILARITY_THRESHOLD)
+        HIGH   — dense match within a named function or class
+        MEDIUM — moderate match
+        LOW    — sparse or short match
+
+Step 7 — Boilerplate exclusion
+    If boilerplate fingerprints are provided (from instructor-uploaded template
+    code) they are subtracted from all student fingerprint sets before scoring,
+    preventing instructor-provided code from inflating similarity scores.
+
+Parallelism
+-----------
+Pair comparisons are distributed across a ``ProcessPoolExecutor`` with one
+worker per CPU core.  Tokenisation is single-threaded (Tree-sitter is not
+thread-safe) but is fast relative to the pairwise comparison phase.
+
+Constants (tunable)
+-------------------
+    SIMILARITY_THRESHOLD        — Minimum score for a pair to be reported (0 = all pairs).
+    UNIT_MATCH_THRESHOLD        — Minimum density for a block to be included.
+    FILE_SIMILARITY_THRESHOLD   — Score above which the entire file is flagged as FILE confidence.
+    ADAPTIVE_K_THRESHOLDS       — (token_count_ceiling, k) breakpoints.
+    ADAPTIVE_K_MAX              — Maximum k value for very large files.
+    MIN_TOKEN_DIVERSITY         — Minimum number of distinct token types required
+                                  to fingerprint a file (prevents trivially short files).
+"""
+
 import os
 import re
 import zipfile
@@ -172,13 +245,25 @@ SWITCH_TYPES = {"switch_expression", "switch_statement"}
 BODY_FIELD_CANDIDATES = ("body", "consequence", "alternative")
 
 
-def adaptive_k(token_count):
+def adaptive_k(token_count: int) -> int:
+    """Choose k-gram size based on the number of tokens in a file.
+
+    Smaller files use a lower k so that even short code snippets produce
+    fingerprints.  Larger files use a higher k to reduce noise from common
+    short patterns (e.g. a lone ``RETURN`` token).
+    """
     for threshold, k in ADAPTIVE_K_THRESHOLDS:
         if token_count < threshold:
             return k
     return ADAPTIVE_K_MAX
 
-def adaptive_window(token_count):
+
+def adaptive_window(token_count: int) -> int:
+    """Choose the winnowing window size based on token count.
+
+    A larger window retains fewer fingerprints (more aggressive compression)
+    and is appropriate for larger files where density of unique patterns is higher.
+    """
     if token_count < 30:
         return 2
     if token_count < 80:
@@ -187,15 +272,23 @@ def adaptive_window(token_count):
         return 4
     return 5
 
-def _same_logical_file(path_a, path_b):
+
+def _same_logical_file(path_a: str, path_b: str) -> bool:
+    """Return True if both paths refer to the same filename (case-insensitive basename comparison)."""
     return os.path.basename(path_a).lower() == os.path.basename(path_b).lower()
 
 
-def _is_reportable_unit(unit_type):
+def _is_reportable_unit(unit_type: str) -> bool:
+    """Return True if the structural unit type should be included in the output report."""
     return unit_type in {"METHOD", "LOOP", "IF", "SWITCH"}
 
 
-def get_parser(extension):
+def get_parser(extension: str):
+    """Return a Tree-sitter Parser configured for the given file extension.
+
+    Supports Java (.java) and C/C++ (.c, .cpp, .cc, .h, .hpp, .cxx, .hxx, .C).
+    Returns None for unsupported extensions so callers can skip the file gracefully.
+    """
     parser = Parser()
     try:
         if extension == ".java":
@@ -376,7 +469,23 @@ def _emit_expr_semantics(node, tokens):
         _append_token(tokens, "TERNARY_EXPR", line)
 
 
-def normalize_ast(node, tokens):
+def normalize_ast(node, tokens: list) -> None:
+    """Recursively walk a Tree-sitter AST node and emit normalised tokens.
+
+    The output is a flat list of ``{"t": token_str, "line": int, ...}`` dicts
+    appended to *tokens*.  The normalisation strategy:
+
+    - Nodes in IGNORE_NODE_TYPES (punctuation, grouping, includes) are
+      transparent — their children are visited but no token is emitted.
+    - Structural nodes (loops, methods, if-blocks, classes, switch) emit
+      bracketing tokens (LOOP_START/LOOP_END, FUNC_DEF/FUNC_END, etc.) and
+      recurse only into body children, skipping header/condition subtrees.
+    - Leaf nodes are mapped via LEXICAL_MAP (identifiers → ID, literals → NUM/STR)
+      or STRUCTURAL_MAP (expressions → ASSIGN, CALL, etc.).
+    - After emitting a structural token, _emit_expr_semantics or
+      _emit_call_semantics injects additional semantic tokens for high-signal
+      patterns (accumulators, comparisons, API calls).
+    """
     node_type = node.type
     line = node.start_point[0] + 1
 
@@ -440,7 +549,22 @@ def normalize_ast(node, tokens):
         normalize_ast(child, tokens)
 
 
-def collect_structural_spans(node, spans):
+def collect_structural_spans(node, spans: list) -> None:
+    """Recursively collect all structural unit spans from the AST.
+
+    Appends dicts of the form::
+
+        {
+            "type":         "METHOD" | "LOOP" | "IF" | "SWITCH" | "CLASS",
+            "start":        int,   # 1-based start line
+            "end":          int,   # 1-based end line
+            "name":         str | None,  # function/method name if extractable
+            "loop_subtype": str | None,  # "for" | "while" | "do_while" | "range_for"
+        }
+
+    These spans are later used by ``find_enclosing_unit`` to annotate each
+    k-gram with the structural context it lives in.
+    """
     unit_type = STRUCTURE_TYPES.get(node.type)
     if unit_type:
         loop_subtype = None
@@ -472,14 +596,25 @@ def _span_sort_key(span):
     return (UNIT_PRIORITY.get(span["type"], 999), length, span["start"], span["end"])
 
 
-def find_enclosing_unit(start_line, end_line, spans):
+def find_enclosing_unit(start_line: int, end_line: int, spans: list) -> dict | None:
+    """Return the tightest structural unit that fully encloses [start_line, end_line].
+
+    "Tightest" is defined by UNIT_PRIORITY (METHOD > LOOP > IF > SWITCH > CLASS)
+    then by shortest span length, then by earliest start line.
+    Returns None if no enclosing unit exists (e.g. top-level code).
+    """
     candidates = [span for span in spans if span["start"] <= start_line and span["end"] >= end_line]
     if not candidates:
         return None
     return min(candidates, key=_span_sort_key)
 
 
-def find_enclosing_unit_of_type(start_line, end_line, spans, allowed_types):
+def find_enclosing_unit_of_type(start_line: int, end_line: int, spans: list, allowed_types: set) -> dict | None:
+    """Like ``find_enclosing_unit`` but restricted to specific unit types.
+
+    Used to independently find the nearest enclosing LOOP and METHOD for each
+    k-gram so both can be stored in the fingerprint metadata.
+    """
     candidates = [
         span for span in spans
         if span["type"] in allowed_types and span["start"] <= start_line and span["end"] >= end_line
@@ -489,7 +624,20 @@ def find_enclosing_unit_of_type(start_line, end_line, spans, allowed_types):
     return min(candidates, key=lambda s: (s["end"] - s["start"] + 1, s["start"], s["end"]))
 
 
-def normalize_package(directory_path, student_id):
+def normalize_package(directory_path: str, student_id: str) -> list:
+    """Parse all supported source files in a student's submission directory.
+
+    Walks *directory_path* recursively, skipping macOS metadata files and
+    unsupported extensions.  For each file it:
+      1. Parses the source with Tree-sitter.
+      2. Calls ``normalize_ast`` to produce a token stream.
+      3. Calls ``collect_structural_spans`` to record unit boundaries.
+      4. Tags every token with the relative file path and student ID.
+
+    Returns a list of per-file dicts::
+
+        [{"path": str, "tokens": [...], "spans": [...]}, ...]
+    """
     valid_exts = {".java", ".cpp", ".cc", ".c", ".h", ".hpp", ".cxx", ".hxx", ".C"}
     files = []
 
@@ -532,7 +680,18 @@ def normalize_package(directory_path, student_id):
     return file_data
 
 
-def kgrams(tokens, k, spans):
+def kgrams(tokens: list, k: int, spans: list) -> list:
+    """Generate all valid k-grams from a token stream.
+
+    A k-gram is valid if:
+    - All k tokens come from the same file (no cross-file grams).
+    - The token type diversity meets the minimum threshold (prevents
+      fingerprinting trivially uniform sequences like ``ID ID ID``).
+
+    Each returned gram is a tuple of (content_str, metadata_dict) where
+    content_str is the space-joined token type sequence and metadata carries
+    the file path, line range, and enclosing structural unit information.
+    """
     total_tokens = len(tokens)
     min_diversity = 2 if total_tokens < 60 else MIN_TOKEN_DIVERSITY
 
@@ -575,7 +734,12 @@ def kgrams(tokens, k, spans):
     return grams
 
 
-def hash_kgrams(kgrams_list):
+def hash_kgrams(kgrams_list: list) -> list:
+    """Hash each k-gram content string with MurmurHash3-128 (or Blake2b fallback).
+
+    Mutates the metadata dicts in-place by setting ``meta["hash"]`` and
+    returns the list of metadata dicts (the content strings are discarded).
+    """
     hashed_list = []
     for content_str, meta in kgrams_list:
         meta["hash"] = stable_hash128(content_str)
@@ -583,7 +747,17 @@ def hash_kgrams(kgrams_list):
     return hashed_list
 
 
-def winnow(hashed_grams, w):
+def winnow(hashed_grams: list, w: int) -> list:
+    """Select fingerprints from hashed k-grams using the Moss winnowing algorithm.
+
+    Slides a window of size *w* over the sorted hash sequence.  In each window
+    the minimum hash is selected.  Ties are broken by choosing the rightmost
+    occurrence (matching the original Moss paper).  A fingerprint is only added
+    to the output if its position in the sequence changed from the previous
+    selected minimum — this deduplicates adjacent windows with the same minimum.
+
+    Returns a list of fingerprint metadata dicts (a subset of *hashed_grams*).
+    """
     if not hashed_grams:
         return []
     if len(hashed_grams) < w:
@@ -641,7 +815,21 @@ def _lookup_source(source_cache, student_id, internal_path):
     return ""
 
 
-def process_zip_submission(zip_path, extract_root):
+def process_zip_submission(zip_path: str, extract_root: str) -> tuple:
+    """Extract a student ZIP, tokenise all source files, and generate fingerprints.
+
+    Args:
+        zip_path:     Path to the student's submission ZIP file.
+        extract_root: Temporary directory into which the ZIP will be extracted.
+
+    Returns:
+        (student_id, fingerprints, k_map) where:
+            student_id   — derived from the ZIP filename (student number).
+            fingerprints — list of winnowed fingerprint dicts for all files.
+            k_map        — dict mapping relative file path → k value used.
+
+    Returns (student_id, [], {}) silently if the ZIP is corrupt.
+    """
     student_id = os.path.splitext(os.path.basename(zip_path))[0]
     extract_path = os.path.join(extract_root, student_id)
     try:
@@ -671,7 +859,13 @@ def process_zip_submission(zip_path, extract_root):
         return student_id, [], {}
 
 
-def load_boilerplate_hashes(template_dir):
+def load_boilerplate_hashes(template_dir: str) -> set:
+    """Fingerprint all files in the boilerplate directory and return their hash set.
+
+    Both the winnowed fingerprints AND all raw k-gram hashes are included so
+    that even un-selected boilerplate patterns are excluded from student scoring.
+    Returns an empty set if *template_dir* does not exist or is empty.
+    """
     if not os.path.exists(template_dir) or not os.listdir(template_dir):
         return set()
 
@@ -692,7 +886,12 @@ def load_boilerplate_hashes(template_dir):
     return {fp["hash"] for fp in all_fps} | {fp["hash"] for fp in all_raw}
 
 
-def build_inverted_index(fingerprint_db):
+def build_inverted_index(fingerprint_db: dict) -> dict:
+    """Build a hash → {student_id, …} inverted index from all fingerprints.
+
+    Used to find candidate pairs efficiently: only pairs that share at least
+    one hash need to be compared, avoiding an O(n²) all-pairs comparison.
+    """
     inverted = {}
     for student_id, fps in fingerprint_db.items():
         for fp in fps:
@@ -703,7 +902,8 @@ def build_inverted_index(fingerprint_db):
     return inverted
 
 
-def candidate_pairs_from_index(inverted_index):
+def candidate_pairs_from_index(inverted_index: dict) -> set:
+    """Return the set of (student_a, student_b) pairs that share at least one fingerprint hash."""
     candidates = set()
     for students in inverted_index.values():
         if len(students) > 1:
@@ -712,7 +912,13 @@ def candidate_pairs_from_index(inverted_index):
     return candidates
 
 
-def build_idf_weights(inverted_index, total_students):
+def build_idf_weights(inverted_index: dict, total_students: int) -> dict:
+    """Compute IDF weights for each fingerprint hash.
+
+    Hashes shared by many students receive a low weight (common boilerplate).
+    Hashes unique to one or two students receive a high weight (distinctive code).
+    Weight formula: 1 / log(1 + document_frequency)
+    """
     weights = {}
     for h, students in inverted_index.items():
         doc_freq = len(students)
@@ -720,7 +926,13 @@ def build_idf_weights(inverted_index, total_students):
     return weights
 
 
-def _compatible_units(fa, fb):
+def _compatible_units(fa: dict, fb: dict) -> bool:
+    """Return True if two fingerprints have compatible structural unit types.
+
+    Fingerprints from structurally incompatible contexts (e.g. a class-level
+    match paired with a loop-level match) are suppressed to reduce false positives.
+    Missing unit types on either side are treated as compatible (permissive).
+    """
     uta, utb = fa.get("unit_type"), fb.get("unit_type")
 
     if not uta or not utb:
@@ -739,7 +951,24 @@ def _compatible_units(fa, fb):
     return (uta, utb) in compatible_pairs
 
 
-def compare_fingerprints(fp_a, fp_b, idf_weights):
+def compare_fingerprints(fp_a: list, fp_b: list, idf_weights: dict) -> tuple:
+    """Compare the fingerprint sets of two students and return (score, matches).
+
+    Args:
+        fp_a:        Fingerprints for student A.
+        fp_b:        Fingerprints for student B.
+        idf_weights: Hash → weight map from ``build_idf_weights``.
+
+    Returns:
+        (score, matches) where:
+            score   — IDF-weighted Jaccard similarity in [0, 1].
+            matches — list of raw match dicts, one per shared fingerprint,
+                      carrying file paths and line ranges for both students.
+
+    Only fingerprints with compatible structural unit types (see
+    ``_compatible_units``) are included in matches to suppress false positives
+    from coincidentally identical patterns in structurally different contexts.
+    """
     map_a = {}
     for fp in fp_a:
         map_a.setdefault(fp["hash"], []).append(fp)
@@ -1373,11 +1602,34 @@ def build_pair_object(s1, s2, score, raw_matches, source_cache, fp_a=None, fp_b=
     }
 
 
-def run_engine(submissions_folder, boilerplate_folder=None,
-               similarity_threshold=0.15, parallel=True):
-    """Run the plagiarism detection pipeline.
+def run_engine(submissions_folder: str, boilerplate_folder: str | None = None,
+               similarity_threshold: float = 0.15, parallel: bool = True) -> dict:
+    """Run the full plagiarism detection pipeline on a folder of student ZIPs.
 
-    Returns dict with ``metadata`` and ``pairs`` keys.
+    This is the top-level entry point called by the analysis service.
+
+    Pipeline steps executed here:
+        1. Load boilerplate hashes (if a boilerplate folder is provided).
+        2. Extract and fingerprint all student ZIP submissions — in parallel
+           using ``ProcessPoolExecutor`` when ``parallel=True``.
+        3. Subtract boilerplate hashes from every student's fingerprint set.
+        4. Build the inverted index and compute IDF weights.
+        5. Identify candidate pairs (those sharing ≥ 1 hash).
+        6. Compare each candidate pair with ``compare_fingerprints``.
+        7. Merge raw matches into structured MatchBlocks and assign confidence.
+        8. Filter pairs below *similarity_threshold*.
+
+    Args:
+        submissions_folder:  Path to a directory of ``{student_number}.zip`` files.
+        boilerplate_folder:  Optional path to a directory of boilerplate source files.
+        similarity_threshold: Minimum IDF-Jaccard score to include a pair in results.
+        parallel:            If True, use multiprocessing for fingerprint extraction.
+
+    Returns:
+        A dict with keys:
+            "metadata": summary statistics (student count, pair count, thresholds).
+            "pairs":    list of pair result dicts, each containing similarity,
+                        matched blocks, source files, and per-student line maps.
     """
     boilerplate_hashes = load_boilerplate_hashes(boilerplate_folder) if boilerplate_folder else set()
 
