@@ -1,58 +1,82 @@
 "use client";
 import { TronGridBackground } from "@/components/tron-grid-background"
 import {
-  GraduationCap,
-  Users,
-  UserCheck,
-  BookOpen,
-  BarChart2,
+  Search,
   ShieldCheck,
+  FileCode,
+  Eye,
+  Upload,
+  BarChart2,
+  Lock,
+  GitCompare,
+  Clock,
 } from "lucide-react";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 
 const services = [
   {
-    icon: GraduationCap,
-    title: "Course Management",
+    icon: Search,
+    title: "Similarity Analysis Engine",
     description:
-      "Create, update, and manage courses across all departments. Instructors can publish syllabi, set enrollment limits, and track progress in real time.",
-    iconClass: "bg-blue-50 text-blue-600",
+      "AST-based code comparison using tree-sitter tokenization, adaptive k-gram hashing, and IDF-weighted Jaccard similarity. Detects structural plagiarism even when variable names, comments, and formatting are changed.",
+    iconClass: "bg-blue-500/10 text-blue-500",
   },
   {
-    icon: Users,
-    title: "Instructor Portal",
+    icon: GitCompare,
+    title: "Side-by-Side Diff Viewer",
     description:
-      "A dedicated space for instructors to manage their courses, view enrolled students, and update course materials — all from one place.",
-    iconClass: "bg-amber-50 text-amber-600",
+      "Review flagged pairs in a responsive split-panel viewer with block highlighting, confidence-level coloring (HIGH / MEDIUM / LOW), hover tooltips, and block-by-block navigation.",
+    iconClass: "bg-amber-500/10 text-amber-500",
   },
   {
-    icon: UserCheck,
-    title: "Student Records",
+    icon: FileCode,
+    title: "Cross-Year Reference Comparison",
     description:
-      "Maintain accurate and up-to-date student records. Admins can enroll students, track academic history, and manage registrations effortlessly.",
-    iconClass: "bg-green-50 text-green-600",
-  },
-  {
-    icon: BookOpen,
-    title: "Course Enrollment",
-    description:
-      "Students can browse available courses and enroll with ease. The system handles capacity limits, prerequisites, and confirmation automatically.",
-    iconClass: "bg-purple-50 text-purple-600",
-  },
-  {
-    icon: BarChart2,
-    title: "Admin Dashboard",
-    description:
-      "A powerful overview for administrators — monitor instructors, students, and courses at a glance with live data and quick action shortcuts.",
-    iconClass: "bg-rose-50 text-rose-600",
+      "Upload previous years' submissions as reference repositories. The engine compares current students against historical work to catch recycled assignments across semesters.",
+    iconClass: "bg-green-500/10 text-green-500",
   },
   {
     icon: ShieldCheck,
-    title: "Role-Based Access",
+    title: "Boilerplate Filtering",
     description:
-      "Secure, role-specific portals for admins, instructors, and students. Each user sees only what they need — nothing more, nothing less.",
-    iconClass: "bg-teal-50 text-teal-600",
+      "Upload instructor-provided starter code as boilerplate. The engine fingerprints template code and excludes matching patterns from similarity scores, eliminating false positives.",
+    iconClass: "bg-purple-500/10 text-purple-500",
+  },
+  {
+    icon: Eye,
+    title: "Anonymous Review & Identity Reveal",
+    description:
+      "All analysis results use anonymous labels (Student A, Student B). Real student identities are encrypted and only disclosed through a formal reveal request approved by the university admin.",
+    iconClass: "bg-rose-500/10 text-rose-500",
+  },
+  {
+    icon: Lock,
+    title: "Encrypted Submissions",
+    description:
+      "Student files are AES-128 encrypted at rest using Fernet. Student identity fields are encrypted in the database. Submission folders use hashed IDs instead of plaintext student numbers.",
+    iconClass: "bg-teal-500/10 text-teal-500",
+  },
+  {
+    icon: Upload,
+    title: "ZIP-Based Submission Portal",
+    description:
+      "Students upload code as ZIP files through a token-authenticated portal. No account required — just an assignment key from the instructor. Supports C, C++, and Java.",
+    iconClass: "bg-indigo-500/10 text-indigo-500",
+  },
+  {
+    icon: BarChart2,
+    title: "Instructor Dashboard",
+    description:
+      "At-a-glance overview of courses, submissions, and flagged pairs with severity breakdowns. Quick-launch analysis directly from the dashboard without navigating to individual assignments.",
+    iconClass: "bg-orange-500/10 text-orange-500",
+  },
+  {
+    icon: Clock,
+    title: "Course Expiry & Data Cleanup",
+    description:
+      "Courses have configurable end dates with a 30-day grace period. After expiry, submission data is automatically purged to comply with data retention policies and free storage.",
+    iconClass: "bg-cyan-500/10 text-cyan-500",
   },
 ];
 
@@ -66,15 +90,15 @@ export default function ServicesPage() {
       <section className="border-b border-border bg-muted/30">
         <div className="max-w-4xl mx-auto px-6 py-20 text-center">
           <span className="inline-block text-xs font-medium tracking-widest uppercase text-muted-foreground mb-4">
-            What we offer
+            Platform Capabilities
           </span>
           <h1 className="text-4xl font-semibold tracking-tight text-foreground mb-4">
-            Everything your academic institution needs
+            Code plagiarism detection, built for universities
           </h1>
           <p className="text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Academic FBI brings together course management, student records, and
-            instructor tools into one clean, easy-to-use platform — built for
-            universities, designed for people.
+            Academic FBI provides a complete pipeline from student submission to
+            similarity analysis — with encrypted storage, anonymous review, and
+            cross-year comparison. No external AI services. No code execution.
           </p>
         </div>
       </section>
@@ -85,7 +109,7 @@ export default function ServicesPage() {
           {services.map((service) => (
             <div
               key={service.title}
-              className="group rounded-xl border border-border bg-card p-6 hover:shadow-sm transition-shadow"
+              className="group rounded-xl border border-border bg-card p-6 hover:border-primary/25 hover:bg-primary/[0.02] transition-all"
             >
               <div
                 className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${service.iconClass}`}
@@ -102,7 +126,6 @@ export default function ServicesPage() {
           ))}
         </div>
       </section>
-
 
       <Footer />
     </div>
