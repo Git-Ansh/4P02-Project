@@ -86,4 +86,3 @@ Academic FBI is a web-based source-code plagiarism detection platform for academ
 
 ---
 
-*This binder was prepared as part of the COSC 4P02 project deliverable — Winter 2026.*
