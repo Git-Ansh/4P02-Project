@@ -27,7 +27,7 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Language = "c" | "cpp" | "java" | "python";
+type Language = "c" | "cpp" | "java";
 
 interface AssignmentInfo {
   university_name: string;
@@ -62,7 +62,6 @@ const LANGUAGE_LABELS: Record<string, string> = {
   c: "C",
   cpp: "C++",
   java: "Java",
-  python: "Python",
 };
 
 function getLanguageLabel(lang: string | undefined): string {

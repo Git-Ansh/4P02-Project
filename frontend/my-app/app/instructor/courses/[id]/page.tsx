@@ -384,7 +384,7 @@ export default function CourseDetailPage() {
                         )}
                         {a.language && (
                           <Badge variant="secondary" className="text-xs">
-                            {{"c": "C", "cpp": "C++", "java": "Java", "python": "Python"}[a.language] || a.language}
+                            {{"c": "C", "cpp": "C++", "java": "Java"}[a.language] || a.language}
                           </Badge>
                         )}
                         {a.allow_resubmission && (
@@ -749,7 +749,6 @@ function AssignmentForm({
             <SelectItem value="c">C</SelectItem>
             <SelectItem value="cpp">C++</SelectItem>
             <SelectItem value="java">Java</SelectItem>
-            <SelectItem value="python">Python</SelectItem>
           </SelectContent>
         </Select>
       </div>
