@@ -140,7 +140,7 @@ const heroBadges = [
 
 const steps = [
   { id: "s1", arrowId: "a12", word: "Create",  text: "Instructor creates an assignment for courses they are teaching with all required guidelines." },
-  { id: "s2", arrowId: "a23", word: "Notify",  text: "Student gets an email to submit the assignment with deadline and token." },
+  { id: "s2", arrowId: "a23", word: "Notify",  text: "Instructor shares a unique submission key with students directly for the assignment." },
   { id: "s3", arrowId: "a34", word: "Submit",  text: "Only allows ZIP submission and token verification maintains security." },
   { id: "s4", arrowId: null,  word: "Analyse", text: "Peer-to-peer comparison is processed and instructor can add previous year assignment for cross-year detection." },
 ]
